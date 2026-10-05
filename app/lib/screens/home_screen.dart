@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../api.dart';
 import '../app_lock.dart';
 import '../models.dart';
+import '../pending.dart';
 import '../storage.dart';
 import 'emergency_screen.dart';
 import 'result_screen.dart';
@@ -19,24 +20,127 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<SavedReport>? _reports;
   Profile? _profile;
+  List<PendingReport> _pending = const [];
+  bool _processing = false;
   bool _analyzing = false;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh().then((_) => _processPending(silent: true));
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _pending.isNotEmpty) {
+      _processPending(silent: true);
+    }
+  }
+
+  /// Reads queued reports one by one. Stops at the first failure so nothing is
+  /// lost: whatever could not be read stays queued for next time.
+  Future<void> _processPending({bool silent = false}) async {
+    if (_processing || !mounted) return;
+    final queue = await loadPending();
+    if (queue.isEmpty) return;
+    setState(() => _processing = true);
+
+    var done = 0;
+    var stopped = false;
+    for (final item in queue) {
+      try {
+        final analysis = await analyzeReport(
+          File(item.filePath),
+          language: item.language,
+        );
+        if (analysis.isMedicalReport) {
+          await saveReport(analysis, profileId: item.profileId);
+          done++;
+        }
+        await removePending(item.id);
+      } on OfflineException {
+        stopped = true;
+        if (!silent) _showMessage('Still offline. Your reports are waiting.');
+        break;
+      } on AnalysisException catch (e) {
+        stopped = true;
+        if (!silent) _showMessage(e.message);
+        break;
+      } catch (_) {
+        stopped = true;
+        break;
+      }
+    }
+
+    await _refresh();
+    if (mounted) setState(() => _processing = false);
+    if (done > 0 && mounted) {
+      _showMessage(
+        done == 1
+            ? '1 queued report was read and saved.'
+            : '$done queued reports were read and saved.',
+      );
+    } else if (!stopped && mounted && !silent) {
+      _showMessage('Those files did not look like medical reports.');
+    }
+  }
+
+  Future<void> _queueForLater(File file) async {
+    await addPending(
+      file,
+      profileId: (await activeProfile()).id,
+      language: await loadLanguage(),
+    );
+    await _refresh();
+    _showMessage(
+      'You are offline. The report is saved and will be read when you are back online.',
+    );
+  }
+
+  Future<void> _discardPending() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Discard waiting reports?'),
+        content: const Text('They have not been read yet and will be deleted.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    for (final item in await loadPending()) {
+      await removePending(item.id);
+    }
+    await _refresh();
   }
 
   Future<void> _refresh() async {
     final profile = await activeProfile();
     final reports = await loadReports();
+    final pending = await loadPending();
     if (mounted) {
       setState(() {
         _profile = profile;
         _reports = reports;
+        _pending = pending;
       });
     }
   }
@@ -250,6 +354,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
       await _refresh();
+    } on OfflineException {
+      await _queueForLater(file);
     } on AnalysisException catch (e) {
       _showMessage(e.message);
     } catch (_) {
@@ -309,6 +415,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final reports = _reports;
     return Scaffold(
       appBar: AppBar(
+        bottom: _pending.isEmpty
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(56),
+                child: _PendingBar(
+                  count: _pending.length,
+                  busy: _processing,
+                  onRead: () => _processPending(),
+                  onDiscard: _discardPending,
+                ),
+              ),
         title: InkWell(
           onTap: _showProfiles,
           borderRadius: BorderRadius.circular(8),
@@ -467,6 +584,55 @@ class _ReportTile extends StatelessWidget {
         trailing: outOfRange == 0
             ? const Icon(Icons.check_circle_outline, color: Colors.green)
             : Chip(label: Text('$outOfRange to review')),
+      ),
+    );
+  }
+}
+
+class _PendingBar extends StatelessWidget {
+  final int count;
+  final bool busy;
+  final VoidCallback onRead;
+  final VoidCallback onDiscard;
+
+  const _PendingBar({
+    required this.count,
+    required this.busy,
+    required this.onRead,
+    required this.onDiscard,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.secondaryContainer,
+      child: SizedBox(
+        height: 56,
+        child: Row(
+          children: [
+            const SizedBox(width: 16),
+            Icon(
+              busy ? Icons.sync : Icons.cloud_off_outlined,
+              color: scheme.onSecondaryContainer,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                busy
+                    ? 'Reading your reports…'
+                    : count == 1
+                    ? '1 report waiting to be read'
+                    : '$count reports waiting to be read',
+                style: TextStyle(color: scheme.onSecondaryContainer),
+              ),
+            ),
+            if (!busy) ...[
+              TextButton(onPressed: onRead, child: const Text('Read now')),
+              TextButton(onPressed: onDiscard, child: const Text('Discard')),
+            ],
+          ],
+        ),
       ),
     );
   }

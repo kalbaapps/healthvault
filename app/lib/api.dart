@@ -14,6 +14,15 @@ const _apiUrl = String.fromEnvironment(
   defaultValue: 'http://10.0.2.2:8080',
 );
 
+/// The phone could not reach the server (no internet, server down).
+/// The report can be queued and read later.
+class OfflineException extends AnalysisException {
+  const OfflineException()
+    : super(
+        'No connection. Your report is saved and will be read once you are online.',
+      );
+}
+
 class AnalysisException implements Exception {
   final String message;
   const AnalysisException(this.message);
@@ -40,9 +49,9 @@ Future<ReportAnalysis> analyzeReport(
       await request.send().timeout(const Duration(minutes: 2)),
     );
   } on SocketException {
-    throw const AnalysisException(
-      'Cannot reach the server. Check your connection.',
-    );
+    throw const OfflineException();
+  } on http.ClientException {
+    throw const OfflineException();
   } on Exception {
     throw const AnalysisException('The server took too long to respond.');
   }

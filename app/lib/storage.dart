@@ -124,13 +124,13 @@ Future<List<SavedReport>> loadReports() async {
   return reports;
 }
 
-Future<void> saveReport(ReportAnalysis analysis) async {
+Future<void> saveReport(ReportAnalysis analysis, {String? profileId}) async {
   final reports = await _loadAll();
   final now = DateTime.now();
   reports.add(
     SavedReport(
       id: now.microsecondsSinceEpoch.toString(),
-      profileId: (await activeProfile()).id,
+      profileId: profileId ?? (await activeProfile()).id,
       savedAt: now,
       analysis: analysis,
     ),
