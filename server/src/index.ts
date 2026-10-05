@@ -1,7 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import multer from "multer";
-import { analyzeReport } from "./analyze.js";
+import { createProvider } from "./analyze.js";
 
 const ALLOWED = new Set([
   "application/pdf",
@@ -16,6 +15,7 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
+const provider = createProvider();
 const app = express();
 
 app.get("/health", (_req, res) => {
@@ -35,15 +35,13 @@ app.post("/analyze", upload.single("file"), async (req, res) => {
   const language = String(req.body?.language ?? "English").slice(0, 40);
 
   try {
-    res.json(await analyzeReport(file.buffer, file.mimetype, language));
+    res.json(await provider.analyze(file.buffer, file.mimetype, language));
   } catch (error) {
-    if (error instanceof Anthropic.RateLimitError) {
+    const status = (error as { status?: number }).status;
+    console.error("Analysis failed:", error);
+    if (status === 429) {
       res.status(503).json({ error: "Busy right now, please try again shortly." });
-    } else if (error instanceof Anthropic.APIError) {
-      console.error(`Claude API error ${error.status}:`, error.message);
-      res.status(502).json({ error: "Analysis service error." });
     } else {
-      console.error(error);
       res.status(500).json({ error: "Could not analyze this report." });
     }
   }
