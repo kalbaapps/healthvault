@@ -3,7 +3,9 @@ import 'package:healthvault/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('shows the empty state when there are no saved reports', (tester) async {
+  testWidgets('shows the empty state when there are no saved reports', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const HealthVaultApp());
     await tester.pumpAndSettle();

@@ -104,27 +104,92 @@ class ReportAnalysis {
   };
 }
 
+/// A person whose reports are kept together (you, a parent, a child...).
+class Profile {
+  final String id;
+  final String name;
+
+  const Profile({required this.id, required this.name});
+
+  factory Profile.fromJson(Map<String, dynamic> j) =>
+      Profile(id: j['id'] as String, name: j['name'] as String);
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
+}
+
+/// Basic facts a first responder needs. Stored on this device only.
+class EmergencyInfo {
+  final String bloodType;
+  final String allergies;
+  final String conditions;
+  final String medications;
+  final String contactName;
+  final String contactPhone;
+
+  const EmergencyInfo({
+    this.bloodType = '',
+    this.allergies = '',
+    this.conditions = '',
+    this.medications = '',
+    this.contactName = '',
+    this.contactPhone = '',
+  });
+
+  bool get isEmpty =>
+      bloodType.isEmpty &&
+      allergies.isEmpty &&
+      conditions.isEmpty &&
+      medications.isEmpty &&
+      contactName.isEmpty &&
+      contactPhone.isEmpty;
+
+  factory EmergencyInfo.fromJson(Map<String, dynamic> j) => EmergencyInfo(
+    bloodType: j['bloodType'] as String? ?? '',
+    allergies: j['allergies'] as String? ?? '',
+    conditions: j['conditions'] as String? ?? '',
+    medications: j['medications'] as String? ?? '',
+    contactName: j['contactName'] as String? ?? '',
+    contactPhone: j['contactPhone'] as String? ?? '',
+  );
+
+  Map<String, dynamic> toJson() => {
+    'bloodType': bloodType,
+    'allergies': allergies,
+    'conditions': conditions,
+    'medications': medications,
+    'contactName': contactName,
+    'contactPhone': contactPhone,
+  };
+}
+
 /// An analysis the user chose to keep on this device.
 class SavedReport {
   final String id;
+  final String profileId;
   final DateTime savedAt;
   final ReportAnalysis analysis;
 
   const SavedReport({
     required this.id,
+    required this.profileId,
     required this.savedAt,
     required this.analysis,
   });
 
   factory SavedReport.fromJson(Map<String, dynamic> j) => SavedReport(
     id: j['id'] as String,
+    // Reports saved before profiles existed belong to the default profile.
+    profileId: j['profileId'] as String? ?? defaultProfileId,
     savedAt: DateTime.parse(j['savedAt'] as String),
     analysis: ReportAnalysis.fromJson(j['analysis'] as Map<String, dynamic>),
   );
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'profileId': profileId,
     'savedAt': savedAt.toIso8601String(),
     'analysis': analysis.toJson(),
   };
 }
+
+const defaultProfileId = 'me';

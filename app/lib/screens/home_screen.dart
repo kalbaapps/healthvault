@@ -8,6 +8,7 @@ import '../api.dart';
 import '../app_lock.dart';
 import '../models.dart';
 import '../storage.dart';
+import 'emergency_screen.dart';
 import 'result_screen.dart';
 import 'trends_screen.dart';
 
@@ -20,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<SavedReport>? _reports;
+  Profile? _profile;
   bool _analyzing = false;
 
   @override
@@ -29,8 +31,177 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
+    final profile = await activeProfile();
     final reports = await loadReports();
-    if (mounted) setState(() => _reports = reports);
+    if (mounted) {
+      setState(() {
+        _profile = profile;
+        _reports = reports;
+      });
+    }
+  }
+
+  Future<void> _switchProfile(String id) async {
+    await setActiveProfile(id);
+    await _refresh();
+  }
+
+  Future<String?> _askName(String title, [String initial = '']) {
+    final controller = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: 'Name, e.g. Mum'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addProfile() async {
+    final name = await _askName('Add a person');
+    if (name == null || name.isEmpty) return;
+    final profile = await addProfile(name);
+    await _switchProfile(profile.id);
+  }
+
+  Future<void> _renameProfile(Profile profile) async {
+    final name = await _askName('Rename', profile.name);
+    if (name == null || name.isEmpty) return;
+    await renameProfile(profile.id, name);
+    await _refresh();
+  }
+
+  Future<void> _deleteProfile(Profile profile) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Delete ${profile.name}?'),
+        content: const Text(
+          'All of their reports and emergency details will be removed from this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await deleteProfile(profile.id);
+    await _refresh();
+  }
+
+  Future<void> _showProfiles() async {
+    final profiles = await loadProfiles();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final p in profiles)
+              ListTile(
+                leading: Icon(
+                  p.id == _profile?.id
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                ),
+                title: Text(p.name),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  _switchProfile(p.id);
+                },
+                trailing: PopupMenuButton<String>(
+                  onSelected: (action) {
+                    Navigator.pop(sheet);
+                    if (action == 'rename') _renameProfile(p);
+                    if (action == 'delete') _deleteProfile(p);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                    if (profiles.length > 1)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete'),
+                      ),
+                  ],
+                ),
+              ),
+            ListTile(
+              leading: const Icon(Icons.person_add_alt_1),
+              title: const Text('Add a person'),
+              onTap: () {
+                Navigator.pop(sheet);
+                _addProfile();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickLanguage() async {
+    final current = await loadLanguage();
+    if (!mounted) return;
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (dialog) => SimpleDialog(
+        title: const Text('Explain results in'),
+        children: [
+          for (final l in supportedLanguages)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialog, l),
+              child: Row(
+                children: [
+                  Expanded(child: Text(l)),
+                  if (l == current) const Icon(Icons.check, size: 18),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (chosen != null) {
+      await saveLanguage(chosen);
+      _showMessage('Results will be explained in $chosen.');
+    }
+  }
+
+  Future<void> _onMenu(String action) async {
+    switch (action) {
+      case 'lock_on':
+        await _toggleLock(true);
+      case 'lock_off':
+        await _toggleLock(false);
+      case 'language':
+        await _pickLanguage();
+      case 'emergency':
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const EmergencyEditScreen()),
+        );
+    }
   }
 
   Future<void> _pick(String source) async {
@@ -62,7 +233,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _analyze(File file) async {
     setState(() => _analyzing = true);
     try {
-      final analysis = await analyzeReport(file);
+      final analysis = await analyzeReport(
+        file,
+        language: await loadLanguage(),
+      );
       if (!mounted) return;
       if (!analysis.isMedicalReport) {
         _showMessage(
@@ -135,7 +309,25 @@ class _HomeScreenState extends State<HomeScreen> {
     final reports = _reports;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('HealthVault'),
+        title: InkWell(
+          onTap: _showProfiles,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    _profile?.name ?? 'HealthVault',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.arrow_drop_down),
+              ],
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'Trends',
@@ -144,12 +336,17 @@ class _HomeScreenState extends State<HomeScreen> {
               MaterialPageRoute<void>(builder: (_) => const TrendsScreen()),
             ),
           ),
-          PopupMenuButton<bool>(
+          PopupMenuButton<String>(
             tooltip: 'Settings',
-            onSelected: _toggleLock,
+            onSelected: _onMenu,
             itemBuilder: (_) => const [
-              PopupMenuItem(value: true, child: Text('Turn on app lock')),
-              PopupMenuItem(value: false, child: Text('Turn off app lock')),
+              PopupMenuItem(value: 'emergency', child: Text('Emergency card')),
+              PopupMenuItem(value: 'language', child: Text('Language')),
+              PopupMenuItem(value: 'lock_on', child: Text('Turn on app lock')),
+              PopupMenuItem(
+                value: 'lock_off',
+                child: Text('Turn off app lock'),
+              ),
             ],
           ),
         ],

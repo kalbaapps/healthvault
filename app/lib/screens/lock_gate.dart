@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_lock.dart';
+import 'emergency_screen.dart';
 
 /// Shows [child] only after the user has unlocked the app, when App lock is on.
 class LockGate extends StatefulWidget {
@@ -84,6 +85,16 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
               onPressed: _unlock,
               icon: const Icon(Icons.fingerprint),
               label: const Text('Unlock'),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const EmergencyCardScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.medical_information_outlined),
+              label: const Text('Emergency card'),
             ),
           ],
         ),

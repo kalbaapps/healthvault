@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../pdf_brief.dart';
 import '../storage.dart';
 
 class ResultScreen extends StatefulWidget {
@@ -17,6 +18,17 @@ class ResultScreen extends StatefulWidget {
 
 class _ResultScreenState extends State<ResultScreen> {
   late final String? _savedId = widget.savedId;
+
+  Future<void> _share() async {
+    try {
+      await shareDoctorBrief(widget.analysis, (await activeProfile()).name);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not create the summary.')),
+      );
+    }
+  }
 
   Future<void> _save() async {
     await saveReport(widget.analysis);
@@ -57,6 +69,11 @@ class _ResultScreenState extends State<ResultScreen> {
       appBar: AppBar(
         title: Text(a.reportType, overflow: TextOverflow.ellipsis),
         actions: [
+          IconButton(
+            onPressed: _share,
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'Share summary for your doctor',
+          ),
           if (_savedId != null)
             IconButton(
               onPressed: _delete,
