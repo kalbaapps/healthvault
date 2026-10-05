@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/lock_gate.dart';
+import 'screens/welcome_screen.dart';
 
 void main() => runApp(const HealthVaultApp());
 
@@ -24,7 +25,7 @@ class HealthVaultApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const LockGate(child: HomeScreen()),
+      home: const LockGate(child: WelcomeGate(child: HomeScreen())),
     );
   }
 }

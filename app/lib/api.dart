@@ -137,4 +137,15 @@ const _mockResponse = <String, dynamic>{
     'What can I do to bring my LDL cholesterol down?',
     'When should I repeat these tests?',
   ],
+  'foodSuggestions': [
+    'Add iron-rich foods such as spinach, lentils and beans, with a squeeze of lemon to help absorption.',
+    'Choose oats, fruit and vegetables for fibre, which can help lower LDL cholesterol.',
+    'Cut back on fried food and fatty meat.',
+  ],
+  'exerciseSuggestions': [
+    'Aim for a brisk 30-minute walk on most days of the week.',
+    'Take short walking breaks if you sit for long periods.',
+  ],
+  'seeDoctor': true,
+  'seeDoctorReason': 'Two results are outside the usual range, so it is worth having a doctor review them.',
 };

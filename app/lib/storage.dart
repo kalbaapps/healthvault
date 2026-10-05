@@ -173,3 +173,12 @@ Future<String> loadLanguage() async =>
 Future<void> saveLanguage(String language) async {
   await (await _prefs).setString(_languageKey, language);
 }
+
+// ---- First launch ----
+
+Future<bool> isOnboarded() async =>
+    (await _prefs).getBool('onboarded') ?? false;
+
+Future<void> setOnboarded() async {
+  await (await _prefs).setBool('onboarded', true);
+}

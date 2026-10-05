@@ -110,6 +110,25 @@ class _ResultScreenState extends State<ResultScreen> {
           Text('Your results', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           for (final v in a.values) _ValueCard(value: v),
+          if (a.foodSuggestions.isNotEmpty ||
+              a.exerciseSuggestions.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('What may help', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (a.foodSuggestions.isNotEmpty)
+              _TipsCard(
+                icon: Icons.restaurant_outlined,
+                title: 'Food',
+                tips: a.foodSuggestions,
+              ),
+            if (a.exerciseSuggestions.isNotEmpty)
+              _TipsCard(
+                icon: Icons.directions_walk,
+                title: 'Activity',
+                tips: a.exerciseSuggestions,
+              ),
+          ],
+          if (a.seeDoctor) _DoctorCard(reason: a.seeDoctorReason),
           if (a.questionsForDoctor.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
@@ -213,6 +232,86 @@ class _ValueCard extends StatelessWidget {
               Text('Usual range: $reference', style: theme.textTheme.bodySmall),
             const SizedBox(height: 8),
             Text(value.explanation),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TipsCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<String> tips;
+
+  const _TipsCard({
+    required this.icon,
+    required this.title,
+    required this.tips,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(title, style: theme.textTheme.titleSmall),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final tip in tips)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('•  '),
+                    Expanded(child: Text(tip)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DoctorCard extends StatelessWidget {
+  final String? reason;
+
+  const _DoctorCard({required this.reason});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: scheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.medical_services_outlined,
+              color: scheme.onTertiaryContainer,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Please see a doctor. ${reason ?? ''}\n\n'
+                'These tips are general and do not replace a doctor\'s advice.',
+                style: TextStyle(color: scheme.onTertiaryContainer),
+              ),
+            ),
           ],
         ),
       ),

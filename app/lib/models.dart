@@ -62,6 +62,10 @@ class ReportAnalysis {
   final bool urgent;
   final String? urgentReason;
   final List<String> questionsForDoctor;
+  final List<String> foodSuggestions;
+  final List<String> exerciseSuggestions;
+  final bool seeDoctor;
+  final String? seeDoctorReason;
 
   const ReportAnalysis({
     required this.isMedicalReport,
@@ -73,7 +77,14 @@ class ReportAnalysis {
     required this.urgent,
     required this.urgentReason,
     required this.questionsForDoctor,
+    this.foodSuggestions = const [],
+    this.exerciseSuggestions = const [],
+    this.seeDoctor = false,
+    this.seeDoctorReason,
   });
+
+  static List<String> _strings(Object? v) =>
+      v is List ? v.map((e) => e as String).toList() : const [];
 
   factory ReportAnalysis.fromJson(Map<String, dynamic> j) => ReportAnalysis(
     isMedicalReport: j['isMedicalReport'] as bool,
@@ -86,9 +97,12 @@ class ReportAnalysis {
     summary: j['summary'] as String,
     urgent: j['urgent'] as bool,
     urgentReason: j['urgentReason'] as String?,
-    questionsForDoctor: (j['questionsForDoctor'] as List)
-        .map((q) => q as String)
-        .toList(),
+    questionsForDoctor: _strings(j['questionsForDoctor']),
+    // Reports saved by earlier versions have none of these fields.
+    foodSuggestions: _strings(j['foodSuggestions']),
+    exerciseSuggestions: _strings(j['exerciseSuggestions']),
+    seeDoctor: j['seeDoctor'] as bool? ?? false,
+    seeDoctorReason: j['seeDoctorReason'] as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -101,6 +115,10 @@ class ReportAnalysis {
     'urgent': urgent,
     'urgentReason': urgentReason,
     'questionsForDoctor': questionsForDoctor,
+    'foodSuggestions': foodSuggestions,
+    'exerciseSuggestions': exerciseSuggestions,
+    'seeDoctor': seeDoctor,
+    'seeDoctorReason': seeDoctorReason,
   };
 }
 
