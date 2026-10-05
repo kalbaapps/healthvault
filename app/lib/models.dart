@@ -20,30 +20,35 @@ class LabValue {
   });
 
   factory LabValue.fromJson(Map<String, dynamic> j) => LabValue(
-        name: j['name'] as String,
-        value: j['value'] as num?,
-        valueText: j['valueText'] as String,
-        unit: j['unit'] as String?,
-        referenceLow: j['referenceLow'] as num?,
-        referenceHigh: j['referenceHigh'] as num?,
-        flag: j['flag'] as String,
-        explanation: j['explanation'] as String,
-      );
+    name: j['name'] as String,
+    value: j['value'] as num?,
+    valueText: j['valueText'] as String,
+    unit: j['unit'] as String?,
+    referenceLow: j['referenceLow'] as num?,
+    referenceHigh: j['referenceHigh'] as num?,
+    flag: j['flag'] as String,
+    explanation: j['explanation'] as String,
+  );
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'value': value,
-        'valueText': valueText,
-        'unit': unit,
-        'referenceLow': referenceLow,
-        'referenceHigh': referenceHigh,
-        'flag': flag,
-        'explanation': explanation,
-      };
+    'name': name,
+    'value': value,
+    'valueText': valueText,
+    'unit': unit,
+    'referenceLow': referenceLow,
+    'referenceHigh': referenceHigh,
+    'flag': flag,
+    'explanation': explanation,
+  };
 
   String get referenceText {
-    if (referenceLow == null && referenceHigh == null) return '';
-    return '${referenceLow ?? ''} – ${referenceHigh ?? ''}${unit == null ? '' : ' $unit'}';
+    final unitSuffix = unit == null ? '' : ' $unit';
+    final low = referenceLow;
+    final high = referenceHigh;
+    if (low != null && high != null) return '$low – $high$unitSuffix';
+    if (high != null) return 'up to $high$unitSuffix';
+    if (low != null) return 'at least $low$unitSuffix';
+    return '';
   }
 }
 
@@ -71,31 +76,32 @@ class ReportAnalysis {
   });
 
   factory ReportAnalysis.fromJson(Map<String, dynamic> j) => ReportAnalysis(
-        isMedicalReport: j['isMedicalReport'] as bool,
-        reportType: j['reportType'] as String,
-        reportDate: j['reportDate'] as String?,
-        patientName: j['patientName'] as String?,
-        values: (j['values'] as List)
-            .map((v) => LabValue.fromJson(v as Map<String, dynamic>))
-            .toList(),
-        summary: j['summary'] as String,
-        urgent: j['urgent'] as bool,
-        urgentReason: j['urgentReason'] as String?,
-        questionsForDoctor:
-            (j['questionsForDoctor'] as List).map((q) => q as String).toList(),
-      );
+    isMedicalReport: j['isMedicalReport'] as bool,
+    reportType: j['reportType'] as String,
+    reportDate: j['reportDate'] as String?,
+    patientName: j['patientName'] as String?,
+    values: (j['values'] as List)
+        .map((v) => LabValue.fromJson(v as Map<String, dynamic>))
+        .toList(),
+    summary: j['summary'] as String,
+    urgent: j['urgent'] as bool,
+    urgentReason: j['urgentReason'] as String?,
+    questionsForDoctor: (j['questionsForDoctor'] as List)
+        .map((q) => q as String)
+        .toList(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'isMedicalReport': isMedicalReport,
-        'reportType': reportType,
-        'reportDate': reportDate,
-        'patientName': patientName,
-        'values': values.map((v) => v.toJson()).toList(),
-        'summary': summary,
-        'urgent': urgent,
-        'urgentReason': urgentReason,
-        'questionsForDoctor': questionsForDoctor,
-      };
+    'isMedicalReport': isMedicalReport,
+    'reportType': reportType,
+    'reportDate': reportDate,
+    'patientName': patientName,
+    'values': values.map((v) => v.toJson()).toList(),
+    'summary': summary,
+    'urgent': urgent,
+    'urgentReason': urgentReason,
+    'questionsForDoctor': questionsForDoctor,
+  };
 }
 
 /// An analysis the user chose to keep on this device.
@@ -111,14 +117,14 @@ class SavedReport {
   });
 
   factory SavedReport.fromJson(Map<String, dynamic> j) => SavedReport(
-        id: j['id'] as String,
-        savedAt: DateTime.parse(j['savedAt'] as String),
-        analysis: ReportAnalysis.fromJson(j['analysis'] as Map<String, dynamic>),
-      );
+    id: j['id'] as String,
+    savedAt: DateTime.parse(j['savedAt'] as String),
+    analysis: ReportAnalysis.fromJson(j['analysis'] as Map<String, dynamic>),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'savedAt': savedAt.toIso8601String(),
-        'analysis': analysis.toJson(),
-      };
+    'id': id,
+    'savedAt': savedAt.toIso8601String(),
+    'analysis': analysis.toJson(),
+  };
 }

@@ -33,8 +33,14 @@ class _ResultScreenState extends State<ResultScreen> {
         title: const Text('Delete this report?'),
         content: const Text('It will be removed from this device.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -72,7 +78,12 @@ class _ResultScreenState extends State<ResultScreen> {
             )
           : null,
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
         children: [
           if (a.urgent) _UrgentBanner(reason: a.urgentReason),
           Text('Summary', style: theme.textTheme.titleMedium),
@@ -84,14 +95,20 @@ class _ResultScreenState extends State<ResultScreen> {
           for (final v in a.values) _ValueCard(value: v),
           if (a.questionsForDoctor.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text('Questions to ask your doctor', style: theme.textTheme.titleMedium),
+            Text(
+              'Questions to ask your doctor',
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             for (final q in a.questionsForDoctor)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [const Text('•  '), Expanded(child: Text(q))],
+                  children: [
+                    const Text('•  '),
+                    Expanded(child: Text(q)),
+                  ],
                 ),
               ),
           ],
@@ -161,7 +178,9 @@ class _ValueCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(value.name, style: theme.textTheme.titleSmall)),
+                Expanded(
+                  child: Text(value.name, style: theme.textTheme.titleSmall),
+                ),
                 Chip(
                   label: Text(label),
                   side: BorderSide(color: color),

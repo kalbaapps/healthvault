@@ -58,12 +58,16 @@ class _HomeScreenState extends State<HomeScreen> {
       final analysis = await analyzeReport(file);
       if (!mounted) return;
       if (!analysis.isMedicalReport) {
-        _showMessage("That doesn't look like a medical report. Try another file.");
+        _showMessage(
+          "That doesn't look like a medical report. Try another file.",
+        );
         return;
       }
-      await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => ResultScreen(analysis: analysis),
-      ));
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ResultScreen(analysis: analysis),
+        ),
+      );
       await _refresh();
     } on AnalysisException catch (e) {
       _showMessage(e.message);
@@ -119,25 +123,32 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _analyzing
           ? const _Analyzing()
           : reports == null
-              ? const Center(child: CircularProgressIndicator())
-              : reports.isEmpty
-                  ? const _EmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                      itemCount: reports.length,
-                      itemBuilder: (context, i) => _ReportTile(
-                        report: reports[i],
-                        onTap: () async {
-                          await Navigator.of(context).push(MaterialPageRoute<void>(
-                            builder: (_) => ResultScreen(
-                              analysis: reports[i].analysis,
-                              savedId: reports[i].id,
-                            ),
-                          ));
-                          await _refresh();
-                        },
+          ? const Center(child: CircularProgressIndicator())
+          : reports.isEmpty
+          ? const _EmptyState()
+          : ListView.builder(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                96 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
+              itemCount: reports.length,
+              itemBuilder: (context, i) => _ReportTile(
+                report: reports[i],
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ResultScreen(
+                        analysis: reports[i].analysis,
+                        savedId: reports[i].id,
                       ),
                     ),
+                  );
+                  await _refresh();
+                },
+              ),
+            ),
     );
   }
 }
@@ -172,11 +183,17 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.health_and_safety_outlined,
-                size: 72, color: theme.colorScheme.primary),
+            Icon(
+              Icons.health_and_safety_outlined,
+              size: 72,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
-            Text('Understand your medical reports',
-                style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+            Text(
+              'Understand your medical reports',
+              style: theme.textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 8),
             Text(
               'Add a lab report as a photo or PDF. HealthVault explains each result in plain language.',
@@ -199,8 +216,11 @@ class _ReportTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = report.analysis;
-    final outOfRange = a.values.where((v) => v.flag == 'low' || v.flag == 'high').length;
-    final date = a.reportDate ?? report.savedAt.toIso8601String().substring(0, 10);
+    final outOfRange = a.values
+        .where((v) => v.flag == 'low' || v.flag == 'high')
+        .length;
+    final date =
+        a.reportDate ?? report.savedAt.toIso8601String().substring(0, 10);
     return Card(
       child: ListTile(
         onTap: onTap,

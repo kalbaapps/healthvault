@@ -12,7 +12,9 @@ Future<List<SavedReport>> loadReports() async {
   final reports = <SavedReport>[];
   for (final item in raw) {
     try {
-      reports.add(SavedReport.fromJson(jsonDecode(item) as Map<String, dynamic>));
+      reports.add(
+        SavedReport.fromJson(jsonDecode(item) as Map<String, dynamic>),
+      );
     } catch (_) {
       // Skip an entry that can no longer be read rather than losing the whole list.
     }
@@ -32,11 +34,13 @@ Future<void> _write(List<SavedReport> reports) async {
 Future<void> saveReport(ReportAnalysis analysis) async {
   final reports = await loadReports();
   final now = DateTime.now();
-  reports.add(SavedReport(
-    id: now.microsecondsSinceEpoch.toString(),
-    savedAt: now,
-    analysis: analysis,
-  ));
+  reports.add(
+    SavedReport(
+      id: now.microsecondsSinceEpoch.toString(),
+      savedAt: now,
+      analysis: analysis,
+    ),
+  );
   await _write(reports);
 }
 
