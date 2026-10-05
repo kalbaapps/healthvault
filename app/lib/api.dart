@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
@@ -26,7 +27,7 @@ Future<ReportAnalysis> analyzeReport(
 }) async {
   if (_useMock) {
     await Future<void>.delayed(const Duration(seconds: 2));
-    return ReportAnalysis.fromJson(_mockResponse);
+    return ReportAnalysis.fromJson(_withJitter(_mockResponse));
   }
 
   final request = http.MultipartRequest('POST', Uri.parse('$_apiUrl/analyze'))
@@ -53,6 +54,31 @@ Future<ReportAnalysis> analyzeReport(
     );
   }
   return ReportAnalysis.fromJson(body);
+}
+
+/// Mock mode only: nudges each number a little so several saved samples
+/// produce a visible trend, and recomputes the flag from the printed range.
+Map<String, dynamic> _withJitter(Map<String, dynamic> base) {
+  final random = Random();
+  final values = [
+    for (final v in base['values'] as List)
+      () {
+        final m = Map<String, dynamic>.of(v as Map<String, dynamic>);
+        final value = (m['value'] as num) * (0.9 + random.nextDouble() * 0.2);
+        final rounded = double.parse(value.toStringAsFixed(1));
+        final low = m['referenceLow'] as num?;
+        final high = m['referenceHigh'] as num?;
+        m['value'] = rounded;
+        m['valueText'] = rounded.toString();
+        m['flag'] = (low != null && rounded < low)
+            ? 'low'
+            : (high != null && rounded > high)
+            ? 'high'
+            : 'normal';
+        return m;
+      }(),
+  ];
+  return {...base, 'values': values};
 }
 
 const _mockResponse = <String, dynamic>{

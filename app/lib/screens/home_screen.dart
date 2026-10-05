@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
+import '../app_lock.dart';
 import '../models.dart';
 import '../storage.dart';
 import 'result_screen.dart';
+import 'trends_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,20 +35,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _pick(String source) async {
     File? file;
-    if (source == 'camera' || source == 'gallery') {
-      final picked = await ImagePicker().pickImage(
-        source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
-        maxWidth: 2400,
-        imageQuality: 85,
-      );
-      if (picked != null) file = File(picked.path);
-    } else {
-      final picked = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-      );
-      final path = picked.isEmpty ? null : picked.first.path;
-      if (path != null) file = File(path);
+    AppLock.suspended = true;
+    try {
+      if (source == 'camera' || source == 'gallery') {
+        final picked = await ImagePicker().pickImage(
+          source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
+          maxWidth: 2400,
+          imageQuality: 85,
+        );
+        if (picked != null) file = File(picked.path);
+      } else {
+        final picked = await FilePicker.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['pdf'],
+        );
+        final path = picked.isEmpty ? null : picked.first.path;
+        if (path != null) file = File(path);
+      }
+    } finally {
+      AppLock.suspended = false;
     }
     if (file == null || !mounted) return;
     await _analyze(file);
@@ -76,6 +83,21 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _analyzing = false);
     }
+  }
+
+  Future<void> _toggleLock(bool enable) async {
+    if (enable) {
+      if (!await AppLock.isAvailable()) {
+        _showMessage('Set a screen lock or fingerprint on your phone first.');
+        return;
+      }
+      AppLock.suspended = true;
+      final ok = await AppLock.authenticate();
+      AppLock.suspended = false;
+      if (!ok) return;
+    }
+    await AppLock.setEnabled(enable);
+    _showMessage(enable ? 'App lock is on.' : 'App lock is off.');
   }
 
   void _showMessage(String text) {
@@ -112,7 +134,26 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final reports = _reports;
     return Scaffold(
-      appBar: AppBar(title: const Text('HealthVault')),
+      appBar: AppBar(
+        title: const Text('HealthVault'),
+        actions: [
+          IconButton(
+            tooltip: 'Trends',
+            icon: const Icon(Icons.show_chart),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const TrendsScreen()),
+            ),
+          ),
+          PopupMenuButton<bool>(
+            tooltip: 'Settings',
+            onSelected: _toggleLock,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: true, child: Text('Turn on app lock')),
+              PopupMenuItem(value: false, child: Text('Turn off app lock')),
+            ],
+          ),
+        ],
+      ),
       floatingActionButton: _analyzing
           ? null
           : FloatingActionButton.extended(
