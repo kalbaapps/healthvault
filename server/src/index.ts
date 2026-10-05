@@ -39,7 +39,7 @@ app.post("/analyze", upload.single("file"), async (req, res) => {
   } catch (error) {
     const status = (error as { status?: number }).status;
     console.error("Analysis failed:", error);
-    if (status === 429) {
+    if (status === 429 || status === 503) {
       res.status(503).json({ error: "Busy right now, please try again shortly." });
     } else {
       res.status(500).json({ error: "Could not analyze this report." });
