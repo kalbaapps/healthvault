@@ -11,6 +11,7 @@ import '../pending.dart';
 import '../storage.dart';
 import 'emergency_screen.dart';
 import 'result_screen.dart';
+import 'review_screen.dart';
 import 'trends_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<PendingReport> _pending = const [];
   bool _processing = false;
   bool _analyzing = false;
+  int _analysisRun = 0;
 
   @override
   void initState() {
@@ -308,8 +310,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _pick(String source) async {
-    File? file;
+  /// Opens the camera, gallery or PDF picker. Returns null if the user backs out.
+  Future<File?> _pickFile(String source) async {
     AppLock.suspended = true;
     try {
       if (source == 'camera' || source == 'gallery') {
@@ -318,30 +320,57 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           maxWidth: 2400,
           imageQuality: 85,
         );
-        if (picked != null) file = File(picked.path);
-      } else {
-        final picked = await FilePicker.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['pdf'],
-        );
-        final path = picked.isEmpty ? null : picked.first.path;
-        if (path != null) file = File(path);
+        return picked == null ? null : File(picked.path);
       }
+      final picked = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      final path = picked.isEmpty ? null : picked.first.path;
+      return path == null ? null : File(path);
     } finally {
       AppLock.suspended = false;
     }
-    if (file == null || !mounted) return;
-    await _analyze(file);
+  }
+
+  /// Pick, let the user check it, and only then send it to be read.
+  /// Retake goes back to the camera; backing out at any point cancels.
+  Future<void> _pick(String source) async {
+    while (true) {
+      final file = await _pickFile(source);
+      if (file == null || !mounted) return;
+
+      final choice = await Navigator.of(context).push<ReviewChoice>(
+        MaterialPageRoute<ReviewChoice>(
+          builder: (_) => ReviewScreen(file: file, isPdf: source == 'pdf'),
+        ),
+      );
+      if (!mounted) return;
+      if (choice == ReviewChoice.use) {
+        await _analyze(file);
+        return;
+      }
+      if (choice != ReviewChoice.retake) return;
+    }
+  }
+
+  void _cancelAnalysis() {
+    if (!_analyzing) return;
+    _analysisRun++;
+    setState(() => _analyzing = false);
   }
 
   Future<void> _analyze(File file) async {
+    final run = ++_analysisRun;
+    bool cancelled() => run != _analysisRun || !mounted;
+
     setState(() => _analyzing = true);
     try {
       final analysis = await analyzeReport(
         file,
         language: await loadLanguage(),
       );
-      if (!mounted) return;
+      if (cancelled() || !mounted) return;
       if (!analysis.isMedicalReport) {
         _showMessage(
           "That doesn't look like a medical report. Try another file.",
@@ -355,13 +384,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       await _refresh();
     } on OfflineException {
-      await _queueForLater(file);
+      if (!cancelled()) await _queueForLater(file);
     } on AnalysisException catch (e) {
-      _showMessage(e.message);
+      if (!cancelled()) _showMessage(e.message);
     } catch (_) {
-      _showMessage('Could not read that report. Please try again.');
+      if (!cancelled()) {
+        _showMessage('Could not read that report. Please try again.');
+      }
     } finally {
-      if (mounted) setState(() => _analyzing = false);
+      if (!cancelled()) setState(() => _analyzing = false);
     }
   }
 
@@ -413,113 +444,129 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final reports = _reports;
-    return Scaffold(
-      appBar: AppBar(
-        bottom: _pending.isEmpty
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(56),
-                child: _PendingBar(
-                  count: _pending.length,
-                  busy: _processing,
-                  onRead: () => _processPending(),
-                  onDiscard: _discardPending,
-                ),
-              ),
-        title: InkWell(
-          onTap: _showProfiles,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    _profile?.name ?? 'HealthVault',
-                    overflow: TextOverflow.ellipsis,
+    return PopScope(
+      canPop: !_analyzing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancelAnalysis();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          bottom: _pending.isEmpty
+              ? null
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(56),
+                  child: _PendingBar(
+                    count: _pending.length,
+                    busy: _processing,
+                    onRead: () => _processPending(),
+                    onDiscard: _discardPending,
                   ),
                 ),
-                const Icon(Icons.arrow_drop_down),
+          title: InkWell(
+            onTap: _showProfiles,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      _profile?.name ?? 'HealthVault',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Trends',
+              icon: const Icon(Icons.show_chart),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const TrendsScreen()),
+              ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Settings',
+              onSelected: _onMenu,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'emergency',
+                  child: Text('Emergency card'),
+                ),
+                PopupMenuItem(value: 'language', child: Text('Language')),
+                PopupMenuItem(
+                  value: 'lock_on',
+                  child: Text('Turn on app lock'),
+                ),
+                PopupMenuItem(
+                  value: 'lock_off',
+                  child: Text('Turn off app lock'),
+                ),
               ],
             ),
-          ),
+          ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Trends',
-            icon: const Icon(Icons.show_chart),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const TrendsScreen()),
-            ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Settings',
-            onSelected: _onMenu,
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'emergency', child: Text('Emergency card')),
-              PopupMenuItem(value: 'language', child: Text('Language')),
-              PopupMenuItem(value: 'lock_on', child: Text('Turn on app lock')),
-              PopupMenuItem(
-                value: 'lock_off',
-                child: Text('Turn off app lock'),
+        floatingActionButton: _analyzing
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _showSources,
+                icon: const Icon(Icons.add),
+                label: const Text('Add report'),
               ),
-            ],
-          ),
-        ],
-      ),
-      floatingActionButton: _analyzing
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _showSources,
-              icon: const Icon(Icons.add),
-              label: const Text('Add report'),
-            ),
-      body: _analyzing
-          ? const _Analyzing()
-          : reports == null
-          ? const Center(child: CircularProgressIndicator())
-          : reports.isEmpty
-          ? const _EmptyState()
-          : ListView.builder(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                8,
-                16,
-                96 + MediaQuery.viewPaddingOf(context).bottom,
-              ),
-              itemCount: reports.length,
-              itemBuilder: (context, i) => _ReportTile(
-                report: reports[i],
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ResultScreen(
-                        analysis: reports[i].analysis,
-                        savedId: reports[i].id,
+        body: _analyzing
+            ? _Analyzing(onCancel: _cancelAnalysis)
+            : reports == null
+            ? const Center(child: CircularProgressIndicator())
+            : reports.isEmpty
+            ? const _EmptyState()
+            : ListView.builder(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  8,
+                  16,
+                  96 + MediaQuery.viewPaddingOf(context).bottom,
+                ),
+                itemCount: reports.length,
+                itemBuilder: (context, i) => _ReportTile(
+                  report: reports[i],
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ResultScreen(
+                          analysis: reports[i].analysis,
+                          savedId: reports[i].id,
+                        ),
                       ),
-                    ),
-                  );
-                  await _refresh();
-                },
+                    );
+                    await _refresh();
+                  },
+                ),
               ),
-            ),
+      ),
     );
   }
 }
 
 class _Analyzing extends StatelessWidget {
-  const _Analyzing();
+  final VoidCallback onCancel;
+
+  const _Analyzing({required this.onCancel});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Reading your report…'),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          const Text('Reading your report…'),
+          const SizedBox(height: 16),
+          TextButton(onPressed: onCancel, child: const Text('Cancel')),
         ],
       ),
     );
