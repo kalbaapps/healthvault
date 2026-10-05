@@ -6,7 +6,14 @@ import 'package:healthvault/models.dart';
 import 'package:healthvault/screens/trends_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-String _report(String id, String date, num ldl, {num? high = 100}) {
+String _report(
+  String id,
+  String date,
+  num ldl, {
+  num? high = 100,
+  String name = 'LDL cholesterol',
+  String? canonical,
+}) {
   final flag = (high != null && ldl > high) ? 'high' : 'normal';
   return jsonEncode(
     SavedReport(
@@ -20,7 +27,8 @@ String _report(String id, String date, num ldl, {num? high = 100}) {
         patientName: null,
         values: [
           LabValue(
-            name: 'LDL cholesterol',
+            name: name,
+            canonicalName: canonical,
             value: ldl,
             valueText: '$ldl',
             unit: 'mg/dL',
@@ -46,6 +54,37 @@ Future<void> _show(WidgetTester tester, List<String> reports) async {
 }
 
 void main() {
+  testWidgets('one test is matched across reports in different languages', (
+    tester,
+  ) async {
+    // Same test, printed in English on one report and in Sinhala on the next.
+    await _show(tester, [
+      _report('1', '2026-08-10', 120, canonical: 'LDL cholesterol'),
+      _report(
+        '2',
+        '2026-09-10',
+        148,
+        name: 'එල්.ඩී.එල් කොලෙස්ටරෝල්',
+        canonical: 'LDL cholesterol',
+      ),
+    ]);
+
+    expect(find.text('Getting worse'), findsOneWidget);
+    expect(find.text('120 mg/dL'), findsOneWidget);
+    expect(find.text('148 mg/dL'), findsOneWidget);
+  });
+
+  testWidgets('without a canonical name, different names stay separate', (
+    tester,
+  ) async {
+    await _show(tester, [
+      _report('1', '2026-08-10', 120),
+      _report('2', '2026-09-10', 148, name: 'LDL-C'),
+    ]);
+
+    expect(find.textContaining('at least two reports'), findsOneWidget);
+  });
+
   testWidgets('compares the latest month with the previous one', (
     tester,
   ) async {

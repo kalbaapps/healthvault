@@ -1,5 +1,10 @@
 class LabValue {
   final String name;
+
+  /// Standard English name of the test, the same whatever language the report
+  /// or the app is in. Used to match one test across reports. Reports saved
+  /// by earlier versions don't have it.
+  final String? canonicalName;
   final num? value;
   final String valueText;
   final String? unit;
@@ -17,10 +22,15 @@ class LabValue {
     required this.referenceHigh,
     required this.flag,
     required this.explanation,
+    this.canonicalName,
   });
+
+  /// What identifies this test when comparing reports.
+  String get matchKey => (canonicalName ?? name).trim().toLowerCase();
 
   factory LabValue.fromJson(Map<String, dynamic> j) => LabValue(
     name: j['name'] as String,
+    canonicalName: j['canonicalName'] as String?,
     value: j['value'] as num?,
     valueText: j['valueText'] as String,
     unit: j['unit'] as String?,
@@ -32,6 +42,7 @@ class LabValue {
 
   Map<String, dynamic> toJson() => {
     'name': name,
+    'canonicalName': canonicalName,
     'value': value,
     'valueText': valueText,
     'unit': unit,

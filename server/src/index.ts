@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { createProvider } from "./analyze.js";
+import { cleanNames } from "./clean.js";
 
 const ALLOWED = new Set([
   "application/pdf",
@@ -35,7 +36,7 @@ app.post("/analyze", upload.single("file"), async (req, res) => {
   const language = String(req.body?.language ?? "English").slice(0, 40);
 
   try {
-    res.json(await provider.analyze(file.buffer, file.mimetype, language));
+    res.json(cleanNames(await provider.analyze(file.buffer, file.mimetype, language), language));
   } catch (error) {
     const status = (error as { status?: number }).status;
     console.error("Analysis failed:", error);

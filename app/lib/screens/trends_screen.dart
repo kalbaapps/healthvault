@@ -30,7 +30,7 @@ List<_Series> _buildSeries(List<SavedReport> reports) {
         DateTime.tryParse(report.analysis.reportDate ?? '') ?? report.savedAt;
     for (final v in report.analysis.values) {
       if (v.value == null) continue;
-      byName.putIfAbsent(v.name.trim().toLowerCase(), () => []).add((date, v));
+      byName.putIfAbsent(v.matchKey, () => []).add((date, v));
     }
   }
 
