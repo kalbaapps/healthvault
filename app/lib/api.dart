@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
+import 'ask_context.dart';
 import 'models.dart';
 
 /// Build with `--dart-define=USE_MOCK=false --dart-define=API_URL=http://<host>:8080`
@@ -63,6 +64,54 @@ Future<ReportAnalysis> analyzeReport(
     );
   }
   return ReportAnalysis.fromJson(body);
+}
+
+/// Asks the server a question about the user's saved reports.
+/// In demo mode it answers locally from [reports] instead.
+Future<String> askQuestion({
+  required String question,
+  required String language,
+  required List<ChatTurn> history,
+  required List<SavedReport> reports,
+}) async {
+  if (_useMock) {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    return demoAnswer(reports);
+  }
+
+  final http.Response response;
+  try {
+    response = await http
+        .post(
+          Uri.parse('$_apiUrl/ask'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'question': question,
+            'language': language,
+            'history': history.map((t) => t.toJson()).toList(),
+            'reports': reportsForAsk(reports),
+          }),
+        )
+        .timeout(const Duration(minutes: 1));
+  } on SocketException {
+    throw const AnalysisException(
+      'You are offline. Asking questions needs an internet connection.',
+    );
+  } on http.ClientException {
+    throw const AnalysisException(
+      'You are offline. Asking questions needs an internet connection.',
+    );
+  } on Exception {
+    throw const AnalysisException('The server took too long to respond.');
+  }
+
+  final body = jsonDecode(response.body) as Map<String, dynamic>;
+  if (response.statusCode != 200) {
+    throw AnalysisException(
+      body['error'] as String? ?? 'Something went wrong.',
+    );
+  }
+  return body['answer'] as String;
 }
 
 /// Mock mode only: nudges each number a little so several saved samples

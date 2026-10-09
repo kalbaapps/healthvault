@@ -182,3 +182,12 @@ Future<bool> isOnboarded() async =>
 Future<void> setOnboarded() async {
   await (await _prefs).setBool('onboarded', true);
 }
+
+// ---- Ask: consent to send questions and results to the AI ----
+
+Future<bool> hasAskConsent() async =>
+    (await _prefs).getBool('ask_consent') ?? false;
+
+Future<void> setAskConsent() async {
+  await (await _prefs).setBool('ask_consent', true);
+}

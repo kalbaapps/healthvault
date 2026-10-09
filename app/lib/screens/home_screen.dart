@@ -9,6 +9,7 @@ import '../app_lock.dart';
 import '../models.dart';
 import '../pending.dart';
 import '../storage.dart';
+import 'ask_screen.dart';
 import 'emergency_screen.dart';
 import 'result_screen.dart';
 import 'review_screen.dart';
@@ -482,6 +483,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
           actions: [
+            IconButton(
+              tooltip: 'Ask about your reports',
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AskScreen()),
+              ),
+            ),
             IconButton(
               tooltip: 'Trends',
               icon: const Icon(Icons.show_chart),
