@@ -74,6 +74,25 @@ class _ResultScreenState extends State<ResultScreen> {
     await _setCheck(dateOnly(picked));
   }
 
+  /// Cancels the planned check-up, with a few seconds to take it back.
+  Future<void> _clearCheck() async {
+    final previous = _nextCheck;
+    await _setCheck(null);
+    if (!mounted || previous == null) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Check-up reminder turned off'),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => _setCheck(previous),
+          ),
+        ),
+      );
+  }
+
   Future<void> _setCheck(DateTime? date) async {
     setState(() => _nextCheck = date);
     if (date != null) {
@@ -193,7 +212,7 @@ class _ResultScreenState extends State<ResultScreen> {
             next: _nextCheck,
             onChange: _pickCheckDate,
             onAddNext: () => _pickCheckDate(next: true),
-            onClear: () => _setCheck(null),
+            onClear: _clearCheck,
           ),
           if (a.questionsForDoctor.isNotEmpty) ...[
             const SizedBox(height: 16),

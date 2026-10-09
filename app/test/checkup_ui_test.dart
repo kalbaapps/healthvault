@@ -196,6 +196,37 @@ void main() {
       },
     );
 
+    testWidgets('turning the reminder off can be undone', (tester) async {
+      final a = _analysis();
+      final next = addMonths(today, 3);
+      _freshPrefs({
+        'saved_reports': [_saved('42', a, next)],
+      });
+
+      await _open(
+        tester,
+        ResultScreen(analysis: a, savedId: '42', nextCheckAt: next),
+      );
+      await tester.scrollUntilVisible(find.byTooltip('Turn off reminder'), 300);
+      await tester.ensureVisible(find.byTooltip('Turn off reminder'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Turn off reminder'));
+      await tester.pumpAndSettle();
+
+      expect((await loadReports()).single.nextCheckAt, isNull);
+      expect(find.text('Check-up reminder turned off'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+
+      fake.scheduled.clear();
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      // The date and all three alerts are back.
+      expect((await loadReports()).single.nextCheckAt, next);
+      expect(fake.scheduled, hasLength(3));
+      expect(find.text('No reminder set'), findsNothing);
+    });
+
     testWidgets('a check-up that is due offers to add the next date', (
       tester,
     ) async {
