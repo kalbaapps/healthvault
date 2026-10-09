@@ -29,6 +29,7 @@ const report = (...values: LabValue[]): ReportAnalysis => ({
   exerciseSuggestions: [],
   seeDoctor: false,
   seeDoctorReason: null,
+  followUpMonths: null,
 });
 
 const names = (r: ReportAnalysis) => r.values.map((v) => v.name);

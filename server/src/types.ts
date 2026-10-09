@@ -24,6 +24,7 @@ export interface ReportAnalysis {
   exerciseSuggestions: string[];
   seeDoctor: boolean;
   seeDoctorReason: string | null;
+  followUpMonths: number | null;
 }
 
 import type { AskRequest } from "./ask.js";
@@ -53,6 +54,7 @@ export const SCHEMA = {
     "exerciseSuggestions",
     "seeDoctor",
     "seeDoctorReason",
+    "followUpMonths",
   ],
   properties: {
     isMedicalReport: { type: "boolean" },
@@ -96,6 +98,7 @@ export const SCHEMA = {
     exerciseSuggestions: { type: "array", items: { type: "string" } },
     seeDoctor: { type: "boolean" },
     seeDoctorReason: nullable("string"),
+    followUpMonths: nullable("integer"),
   },
 } as const;
 
@@ -112,6 +115,8 @@ Rules:
 - canonicalName is always the standard English name of the test (for example "Total cholesterol", "Triglycerides", "HDL cholesterol", "LDL cholesterol", "Fasting glucose", "Hemoglobin"), regardless of the printed language, so the same test can be matched across reports. Use the same wording for the same test every time.
 - When any result is low or high, give 2 to 4 simple everyday food suggestions and 2 to 3 gentle exercise or lifestyle suggestions that relate to those specific results. Prefer common, affordable foods. These are general wellness tips only: never name medicines, supplements or doses, and never give a treatment or diet plan for a disease. If all results are normal, give at most 2 short tips for staying healthy.
 - Set seeDoctor to true whenever any result is outside its range or urgent is true, and explain in seeDoctorReason in one plain sentence. Set it to false, with a null reason, only when everything is normal. Make clear the tips do not replace a doctor's advice.
+- reportDate must be the date printed on the report as YYYY-MM-DD (for example 2026-08-23), or null if none is printed. Never write the month as a word.
+- followUpMonths is a gentle suggestion of how many months until the user might repeat these tests: 12 when everything is normal, 3 when some results are slightly outside their range, 1 when results are well outside their range or urgent is true. Use null if the file is not a medical report.
 - If the file is not a medical report, set isMedicalReport to false and leave the other fields empty.`;
 
 export const userPrompt = (language: string) =>

@@ -4,6 +4,7 @@ import { parseAskRequest } from "./ask.js";
 import { createProvider } from "./analyze.js";
 import { cleanNames } from "./clean.js";
 import { detectMime } from "./mime.js";
+import { normalizeAnalysis } from "./normalize.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -31,7 +32,8 @@ app.post("/analyze", upload.single("file"), async (req, res) => {
   const language = String(req.body?.language ?? "English").slice(0, 40);
 
   try {
-    res.json(cleanNames(await provider.analyze(file.buffer, mimeType, language), language));
+    const analysis = await provider.analyze(file.buffer, mimeType, language);
+    res.json(normalizeAnalysis(cleanNames(analysis, language)));
   } catch (error) {
     const status = (error as { status?: number }).status;
     console.error("Analysis failed:", error);
