@@ -3,14 +3,7 @@ import multer from "multer";
 import { parseAskRequest } from "./ask.js";
 import { createProvider } from "./analyze.js";
 import { cleanNames } from "./clean.js";
-
-const ALLOWED = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
+import { detectMime } from "./mime.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -30,14 +23,15 @@ app.post("/analyze", upload.single("file"), async (req, res) => {
     res.status(400).json({ error: "Attach a report as multipart field 'file'." });
     return;
   }
-  if (!ALLOWED.has(file.mimetype)) {
+  const mimeType = detectMime(file.buffer);
+  if (!mimeType) {
     res.status(415).json({ error: "Upload a PDF or an image (JPEG, PNG, WebP)." });
     return;
   }
   const language = String(req.body?.language ?? "English").slice(0, 40);
 
   try {
-    res.json(cleanNames(await provider.analyze(file.buffer, file.mimetype, language), language));
+    res.json(cleanNames(await provider.analyze(file.buffer, mimeType, language), language));
   } catch (error) {
     const status = (error as { status?: number }).status;
     console.error("Analysis failed:", error);
