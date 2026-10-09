@@ -1,121 +1,309 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'models.dart';
 
-/// Builds a one-to-two page summary the user can show or send to their doctor.
+/// Opens the share sheet with a one-to-two page summary for a doctor.
 Future<void> shareDoctorBrief(ReportAnalysis a, String profileName) async {
-  // Standard PDF fonts only cover Latin text. Try Noto Sans so other scripts
-  // render too; fall back to the built-in font when offline.
-  pw.ThemeData? theme;
-  try {
-    theme = pw.ThemeData.withFont(
-      base: await PdfGoogleFonts.notoSansRegular(),
-      bold: await PdfGoogleFonts.notoSansBold(),
-    );
-  } catch (_) {
-    theme = null;
-  }
+  await Printing.sharePdf(
+    bytes: await buildBriefPdf(a, profileName),
+    filename: 'health-summary.pdf',
+  );
+}
 
-  final doc = pw.Document(theme: theme);
+/// Builds the summary PDF.
+///
+/// The pages are drawn with the phone's own text engine and placed in the PDF
+/// as images. The PDF library cannot shape Sinhala, Tamil, Hindi or Arabic
+/// text (letters join and reorder wrongly) and has no fonts for them, whereas
+/// the phone's engine handles every script it can show on screen, offline.
+/// The cost is that the text in the PDF cannot be selected or copied.
+Future<Uint8List> buildBriefPdf(
+  ReportAnalysis a,
+  String profileName, {
+  List<String> fontFamilies = const [],
+}) async {
+  final pages = await renderBriefPages(
+    a,
+    profileName,
+    fontFamilies: fontFamilies,
+  );
+  final doc = pw.Document();
+  for (final png in pages) {
+    final image = pw.MemoryImage(png);
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: pw.EdgeInsets.zero,
+        build: (_) => pw.Image(image, fit: pw.BoxFit.fill),
+      ),
+    );
+  }
+  return doc.save();
+}
+
+/// The summary as PNG pages (A4 proportions, 2x resolution).
+///
+/// [fontFamilies] names fonts to draw with (first is primary, the rest are
+/// fallbacks). Empty means the phone's default fonts, which is what the app
+/// uses; it is only set by tests that load their own fonts.
+Future<List<Uint8List>> renderBriefPages(
+  ReportAnalysis a,
+  String profileName, {
+  List<String> fontFamilies = const [],
+}) async {
+  final sheet = _Sheet(families: fontFamilies);
   final flagged = a.values
       .where((v) => v.flag == 'low' || v.flag == 'high')
       .toList();
 
-  doc.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(32),
-      build: (context) => [
-        pw.Text(
-          'Health summary for $profileName',
-          style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.SizedBox(height: 4),
-        pw.Text(
-          '${a.reportType}${a.reportDate == null ? '' : ' · ${a.reportDate}'}',
-        ),
-        pw.SizedBox(height: 16),
-        if (a.urgent)
-          pw.Container(
-            padding: const pw.EdgeInsets.all(8),
-            margin: const pw.EdgeInsets.only(bottom: 12),
-            color: PdfColors.red100,
-            child: pw.Text('Needs prompt attention. ${a.urgentReason ?? ''}'),
-          ),
-        pw.Text(
-          'Summary',
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.SizedBox(height: 4),
-        pw.Text(a.summary),
-        pw.SizedBox(height: 16),
-        if (flagged.isNotEmpty) ...[
-          pw.Text(
-            'Results outside the usual range',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 4),
-          for (final v in flagged)
-            pw.Bullet(
-              text:
-                  '${v.name}: ${v.valueText}${v.unit == null ? '' : ' ${v.unit}'} '
-                  '(${v.flag}${v.referenceText.isEmpty ? '' : ', usual ${v.referenceText}'})',
-            ),
-          pw.SizedBox(height: 16),
-        ],
-        pw.Text(
-          'All results',
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.SizedBox(height: 4),
-        pw.TableHelper.fromTextArray(
-          headers: ['Test', 'Result', 'Usual range', 'Flag'],
-          data: [
-            for (final v in a.values)
-              [
-                v.name,
-                '${v.valueText}${v.unit == null ? '' : ' ${v.unit}'}',
-                v.referenceText,
-                v.flag,
-              ],
-          ],
-          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-          cellAlignment: pw.Alignment.centerLeft,
-        ),
-        if (a.questionsForDoctor.isNotEmpty) ...[
-          pw.SizedBox(height: 16),
-          pw.Text(
-            'Questions to ask',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 4),
-          for (final q in a.questionsForDoctor) pw.Bullet(text: q),
-        ],
-        if (a.foodSuggestions.isNotEmpty ||
-            a.exerciseSuggestions.isNotEmpty) ...[
-          pw.SizedBox(height: 16),
-          pw.Text(
-            'General lifestyle suggestions',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 4),
-          for (final t in [...a.foodSuggestions, ...a.exerciseSuggestions])
-            pw.Bullet(text: t),
-        ],
-        pw.SizedBox(height: 24),
-        pw.Text(
-          'Generated by HealthVault from the lab report. This is a summary for '
-          'discussion, not medical advice. Check values against the original report.',
-          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
-        ),
-      ],
-    ),
+  sheet.text('Health summary for $profileName', size: 20, bold: true);
+  sheet.gap(4);
+  sheet.text(
+    '${a.reportType}${a.reportDate == null ? '' : ' · ${a.reportDate}'}',
+  );
+  sheet.gap(14);
+
+  if (a.urgent) {
+    sheet.banner('Needs prompt attention. ${a.urgentReason ?? ''}');
+  }
+
+  sheet.heading('Summary');
+  sheet.text(a.summary);
+  sheet.gap(14);
+
+  if (flagged.isNotEmpty) {
+    sheet.heading('Results outside the usual range');
+    for (final v in flagged) {
+      final range = v.referenceText.isEmpty ? '' : ', usual ${v.referenceText}';
+      sheet.bullet('${v.name}: ${_result(v)} (${v.flag}$range)');
+    }
+    sheet.gap(14);
+  }
+
+  sheet.heading('All results');
+  sheet.table(
+    header: const ['Test', 'Result', 'Usual range', 'Flag'],
+    rows: [
+      for (final v in a.values) [v.name, _result(v), v.referenceText, v.flag],
+    ],
+    flex: const [2.4, 1.4, 1.5, 0.9],
   );
 
-  await Printing.sharePdf(
-    bytes: await doc.save(),
-    filename: 'health-summary.pdf',
+  if (a.questionsForDoctor.isNotEmpty) {
+    sheet.gap(14);
+    sheet.heading('Questions to ask');
+    for (final q in a.questionsForDoctor) {
+      sheet.bullet(q);
+    }
+  }
+
+  final tips = [...a.foodSuggestions, ...a.exerciseSuggestions];
+  if (tips.isNotEmpty) {
+    sheet.gap(14);
+    sheet.heading('General lifestyle suggestions');
+    for (final t in tips) {
+      sheet.bullet(t);
+    }
+  }
+
+  sheet.gap(20);
+  sheet.text(
+    'Generated by HealthVault from the lab report. This is a summary for '
+    'discussion, not medical advice. Check values against the original report.',
+    size: 9,
+    color: const ui.Color(0xFF616161),
   );
+
+  return sheet.finish();
+}
+
+String _result(LabValue v) =>
+    '${v.valueText}${v.unit == null ? '' : ' ${v.unit}'}';
+
+const _black = ui.Color(0xFF000000);
+
+/// Right-to-left scripts (Arabic, Hebrew, Syriac, Thaana).
+bool _isRtl(String text) => RegExp(r'[֐-ࣿ]').hasMatch(text);
+
+/// A simple top-to-bottom page layout drawn onto canvases.
+class _Sheet {
+  static const pageW = 595.0;
+  static const pageH = 842.0;
+  static const margin = 36.0;
+  static const scale = 2.0;
+  static const contentW = pageW - 2 * margin;
+
+  final _pictures = <ui.Picture>[];
+  late ui.PictureRecorder _recorder;
+  late ui.Canvas _canvas;
+  double _y = margin;
+
+  final List<String> families;
+
+  _Sheet({this.families = const []}) {
+    _begin();
+  }
+
+  void _begin() {
+    _recorder = ui.PictureRecorder();
+    _canvas = ui.Canvas(_recorder)..scale(scale);
+    _canvas.drawRect(
+      const ui.Rect.fromLTWH(0, 0, pageW, pageH),
+      ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+    );
+    _y = margin;
+  }
+
+  /// Starts a new page when [height] more would not fit on this one.
+  void _ensure(double height) {
+    if (_y + height > pageH - margin && _y > margin) {
+      _pictures.add(_recorder.endRecording());
+      _begin();
+    }
+  }
+
+  ui.Paragraph _paragraph(
+    String text,
+    double width, {
+    double size = 11,
+    bool bold = false,
+    ui.Color color = _black,
+    ui.TextAlign? align,
+  }) {
+    final rtl = _isRtl(text);
+    final builder =
+        ui.ParagraphBuilder(
+            ui.ParagraphStyle(
+              textAlign:
+                  align ?? (rtl ? ui.TextAlign.right : ui.TextAlign.left),
+              textDirection: rtl ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+            ),
+          )
+          ..pushStyle(
+            ui.TextStyle(
+              color: color,
+              fontSize: size,
+              fontFamily: families.isEmpty ? null : families.first,
+              fontFamilyFallback: families.length > 1
+                  ? families.sublist(1)
+                  : null,
+              fontWeight: bold ? ui.FontWeight.w700 : ui.FontWeight.w400,
+              height: 1.3,
+            ),
+          )
+          ..addText(text);
+    return builder.build()..layout(ui.ParagraphConstraints(width: width));
+  }
+
+  void gap(double height) => _y += height;
+
+  void text(
+    String text, {
+    double size = 11,
+    bool bold = false,
+    ui.Color color = _black,
+  }) {
+    final p = _paragraph(text, contentW, size: size, bold: bold, color: color);
+    _ensure(p.height);
+    _canvas.drawParagraph(p, ui.Offset(margin, _y));
+    _y += p.height;
+  }
+
+  void heading(String text) {
+    this.text(text, size: 14, bold: true);
+    gap(4);
+  }
+
+  void bullet(String text) {
+    const indent = 14.0;
+    final p = _paragraph(text, contentW - indent);
+    _ensure(p.height);
+    final dot = _paragraph('•', indent);
+    _canvas.drawParagraph(dot, ui.Offset(margin + 2, _y));
+    _canvas.drawParagraph(p, ui.Offset(margin + indent, _y));
+    _y += p.height + 2;
+  }
+
+  void banner(String text) {
+    const pad = 8.0;
+    final p = _paragraph(text, contentW - 2 * pad);
+    _ensure(p.height + 2 * pad);
+    _canvas.drawRect(
+      ui.Rect.fromLTWH(margin, _y, contentW, p.height + 2 * pad),
+      ui.Paint()..color = const ui.Color(0xFFFFCDD2),
+    );
+    _canvas.drawParagraph(p, ui.Offset(margin + pad, _y + pad));
+    _y += p.height + 2 * pad + 12;
+  }
+
+  void table({
+    required List<String> header,
+    required List<List<String>> rows,
+    required List<double> flex,
+  }) {
+    const pad = 5.0;
+    final total = flex.fold<double>(0, (s, f) => s + f);
+    final widths = [for (final f in flex) contentW * f / total];
+    final line = ui.Paint()
+      ..color = const ui.Color(0xFF757575)
+      ..style = ui.PaintingStyle.stroke
+      ..strokeWidth = 0.7;
+
+    void row(List<String> cells, {bool isHeader = false}) {
+      final paragraphs = [
+        for (var i = 0; i < cells.length; i++)
+          _paragraph(
+            cells[i],
+            widths[i] - 2 * pad,
+            bold: isHeader,
+            align: isHeader ? ui.TextAlign.center : null,
+          ),
+      ];
+      final height =
+          paragraphs.fold<double>(0, (m, p) => p.height > m ? p.height : m) +
+          2 * pad;
+      _ensure(height);
+      var x = margin;
+      for (var i = 0; i < paragraphs.length; i++) {
+        final cell = ui.Rect.fromLTWH(x, _y, widths[i], height);
+        if (isHeader) {
+          _canvas.drawRect(
+            cell,
+            ui.Paint()..color = const ui.Color(0xFFEEEEEE),
+          );
+        }
+        _canvas.drawRect(cell, line);
+        _canvas.drawParagraph(paragraphs[i], ui.Offset(x + pad, _y + pad));
+        x += widths[i];
+      }
+      _y += height;
+    }
+
+    row(header, isHeader: true);
+    for (final r in rows) {
+      row(r);
+    }
+  }
+
+  /// Ends the last page and encodes every page as a PNG.
+  Future<List<Uint8List>> finish() async {
+    _pictures.add(_recorder.endRecording());
+    final pages = <Uint8List>[];
+    for (final picture in _pictures) {
+      final image = await picture.toImage(
+        (pageW * scale).round(),
+        (pageH * scale).round(),
+      );
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      pages.add(data!.buffer.asUint8List());
+      image.dispose();
+      picture.dispose();
+    }
+    return pages;
+  }
 }
