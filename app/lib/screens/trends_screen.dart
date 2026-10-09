@@ -226,7 +226,11 @@ class _TrendCard extends StatelessWidget {
                   line: theme.colorScheme.primary,
                   band: Colors.green.withValues(alpha: 0.15),
                   alert: Colors.red,
-                  label: theme.colorScheme.onSurfaceVariant,
+                  labelStyle: (theme.textTheme.bodySmall ?? const TextStyle())
+                      .copyWith(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                 ),
               ),
             ),
@@ -277,14 +281,14 @@ class _ChartPainter extends CustomPainter {
   final Color line;
   final Color band;
   final Color alert;
-  final Color label;
+  final TextStyle labelStyle;
 
   const _ChartPainter({
     required this.series,
     required this.line,
     required this.band,
     required this.alert,
-    required this.label,
+    required this.labelStyle,
   });
 
   @override
@@ -350,10 +354,7 @@ class _ChartPainter extends CustomPainter {
     // First and last dates under the chart.
     void text(String s, double dx, {bool right = false}) {
       final tp = TextPainter(
-        text: TextSpan(
-          text: s,
-          style: TextStyle(fontSize: 11, color: label),
-        ),
+        text: TextSpan(text: s, style: labelStyle),
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(canvas, Offset(right ? dx - tp.width : dx, size.height - 14));
