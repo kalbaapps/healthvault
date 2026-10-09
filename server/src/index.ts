@@ -1,5 +1,6 @@
 import express from "express";
 import multer from "multer";
+import { parseAskRequest } from "./ask.js";
 import { createProvider } from "./analyze.js";
 import { cleanNames } from "./clean.js";
 
@@ -44,6 +45,26 @@ app.post("/analyze", upload.single("file"), async (req, res) => {
       res.status(503).json({ error: "Busy right now, please try again shortly." });
     } else {
       res.status(500).json({ error: "Could not analyze this report." });
+    }
+  }
+});
+
+app.post("/ask", express.json({ limit: "300kb" }), async (req, res) => {
+  const request = parseAskRequest(req.body);
+  if (typeof request === "string") {
+    res.status(400).json({ error: request });
+    return;
+  }
+
+  try {
+    res.json({ answer: await provider.ask(request) });
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    console.error("Ask failed:", error);
+    if (status === 429 || status === 503) {
+      res.status(503).json({ error: "Busy right now, please try again shortly." });
+    } else {
+      res.status(500).json({ error: "Could not answer that. Please try again." });
     }
   }
 });

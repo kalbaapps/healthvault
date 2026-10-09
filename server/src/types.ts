@@ -26,9 +26,12 @@ export interface ReportAnalysis {
   seeDoctorReason: string | null;
 }
 
-/** An AI backend that turns a report file into a structured analysis. */
+import type { AskRequest } from "./ask.js";
+
+/** An AI backend that reads reports and answers questions about them. */
 export interface AnalysisProvider {
   analyze(file: Buffer, mimeType: string, language: string): Promise<ReportAnalysis>;
+  ask(request: AskRequest): Promise<string>;
 }
 
 const nullable = (type: string) => ({ type: [type, "null"] });

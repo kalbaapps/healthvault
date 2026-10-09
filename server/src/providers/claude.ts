@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { askSystemPrompt } from "../ask.js";
 import { SCHEMA, SYSTEM, userPrompt } from "../types.js";
 import type { AnalysisProvider, ReportAnalysis } from "../types.js";
 
@@ -56,6 +57,23 @@ export function claudeProvider(): AnalysisProvider {
         throw new Error("No analysis returned.");
       }
       return JSON.parse(text.text) as ReportAnalysis;
+    },
+
+    async ask(request): Promise<string> {
+      const response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 2000,
+        system: askSystemPrompt(request),
+        messages: [
+          ...request.history.map((turn) => ({ role: turn.role, content: turn.text })),
+          { role: "user" as const, content: request.question },
+        ],
+      });
+      const text = response.content.find((b) => b.type === "text");
+      if (!text || text.type !== "text") {
+        throw new Error("No answer returned.");
+      }
+      return text.text.trim();
     },
   };
 }
