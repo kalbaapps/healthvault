@@ -55,15 +55,18 @@ class _ResultScreenState extends State<ResultScreen> {
     Navigator.of(context).pop();
   }
 
-  Future<void> _pickCheckDate() async {
+  /// Opens the date picker. With [next] it starts from a fresh suggestion
+  /// (after the current check-up) instead of the date already set.
+  Future<void> _pickCheckDate({bool next = false}) async {
     final today = dateOnly(DateTime.now());
     final current = _nextCheck;
+    final keepCurrent = !next && current != null && !current.isBefore(today);
     final picked = await showDatePicker(
       context: context,
-      helpText: 'Next check-up',
-      initialDate: current != null && !current.isBefore(today)
+      helpText: next ? 'Add the next check-up' : 'Next check-up',
+      initialDate: keepCurrent
           ? current
-          : addMonths(today, 3),
+          : addMonths(today, widget.analysis.followUpMonths ?? 3),
       firstDate: today,
       lastDate: addMonths(today, 60),
     );
@@ -113,7 +116,7 @@ class _ResultScreenState extends State<ResultScreen> {
       ),
     );
     if (ok != true) return;
-    await reminders.cancel(reminderIdFor(id));
+    await cancelCheckupReminders(id);
     await deleteReport(id);
     if (mounted) Navigator.of(context).pop();
   }
@@ -189,6 +192,7 @@ class _ResultScreenState extends State<ResultScreen> {
           _CheckupCard(
             next: _nextCheck,
             onChange: _pickCheckDate,
+            onAddNext: () => _pickCheckDate(next: true),
             onClear: () => _setCheck(null),
           ),
           if (a.questionsForDoctor.isNotEmpty) ...[
@@ -394,11 +398,13 @@ class _DoctorCard extends StatelessWidget {
 class _CheckupCard extends StatelessWidget {
   final DateTime? next;
   final VoidCallback onChange;
+  final VoidCallback onAddNext;
   final VoidCallback onClear;
 
   const _CheckupCard({
     required this.next,
     required this.onChange,
+    required this.onAddNext,
     required this.onClear,
   });
 
@@ -407,43 +413,61 @@ class _CheckupCard extends StatelessWidget {
     final theme = Theme.of(context);
     final date = next;
     final status = date == null ? null : checkupStatus(date, DateTime.now());
+    final due =
+        status != null &&
+        (status.urgency == CheckupUrgency.today ||
+            status.urgency == CheckupUrgency.overdue);
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.event_available, color: theme.colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Next check-up', style: theme.textTheme.titleSmall),
-                  Text(
-                    date == null
-                        ? 'No reminder set'
-                        : status!.short.isEmpty
-                        ? formatDay(date)
-                        : '${formatDay(date)} · ${status.short}',
+            Row(
+              children: [
+                Icon(Icons.event_available, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Next check-up', style: theme.textTheme.titleSmall),
+                      Text(
+                        date == null
+                            ? 'No reminder set'
+                            : status!.short.isEmpty
+                            ? formatDay(date)
+                            : '${formatDay(date)} · ${status.short}',
+                      ),
+                      if (date != null)
+                        Text(
+                          'You will get a reminder 2 days before, 1 day before '
+                          'and on the day. Ask your doctor what is right for you.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                    ],
                   ),
-                  if (date != null)
-                    Text(
-                      'A reminder will appear on your phone that morning. '
-                      'Ask your doctor what is right for you.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                ],
-              ),
+                ),
+                TextButton(
+                  onPressed: onChange,
+                  child: Text(date == null ? 'Set a date' : 'Change'),
+                ),
+                if (date != null)
+                  IconButton(
+                    tooltip: 'Turn off reminder',
+                    onPressed: onClear,
+                    icon: const Icon(Icons.notifications_off_outlined),
+                  ),
+              ],
             ),
-            TextButton(
-              onPressed: onChange,
-              child: Text(date == null ? 'Set a date' : 'Change'),
-            ),
-            if (date != null)
-              IconButton(
-                tooltip: 'Turn off reminder',
-                onPressed: onClear,
-                icon: const Icon(Icons.notifications_off_outlined),
+            if (due)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, right: 8),
+                child: FilledButton.tonalIcon(
+                  onPressed: onAddNext,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add next check-up date'),
+                ),
               ),
           ],
         ),

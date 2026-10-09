@@ -21,8 +21,16 @@ abstract class ReminderScheduler {
 /// The scheduler the app uses. Tests swap in a fake.
 ReminderScheduler reminders = LocalNotificationsScheduler();
 
-/// A stable notification id for a saved report.
-int reminderIdFor(String reportId) => reportId.hashCode & 0x7fffffff;
+/// How many days before the check-up each reminder goes off.
+const reminderLeadDays = [2, 1, 0];
+
+/// A stable notification id for one of a saved report's reminders. Each report
+/// owns four consecutive ids (lead 0, 1 and 2 are used), all positive 31-bit
+/// numbers.
+int reminderIdFor(String reportId, {int daysBefore = 0}) {
+  assert(daysBefore >= 0 && daysBefore <= 3);
+  return ((reportId.hashCode & 0x1fffffff) << 2) | daysBefore;
+}
 
 /// Reminders go off in the morning of the check-up day.
 DateTime reminderTime(DateTime day) =>

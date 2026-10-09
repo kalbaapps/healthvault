@@ -161,8 +161,9 @@ void main() {
     });
   });
 
-  group('saving with a reminder', () {
+  group('reminders for a check-up', () {
     late FakeReminders fake;
+    final today = dateOnly(DateTime.now());
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
@@ -170,39 +171,141 @@ void main() {
       reminders = fake;
     });
 
-    test('uses the AI suggestion and schedules it for 9am', () async {
-      final saved = await saveReportWithCheckup(_analysis());
+    ReportAnalysis dated(DateTime day, {int? followUp = 3}) =>
+        _analysis(date: isoDay(day), followUp: followUp);
 
-      expect(saved.nextCheckAt, DateTime(2026, 11, 23));
-      expect(fake.scheduled, hasLength(1));
-      expect(fake.scheduled.single.when, DateTime(2026, 11, 23, 9));
-      expect(fake.scheduled.single.id, reminderIdFor(saved.id));
-      expect(fake.scheduled.single.body, contains('Lipid profile'));
-      expect((await loadReports()).single.nextCheckAt, DateTime(2026, 11, 23));
+    test(
+      'three alerts: 2 days before, 1 day before and on the day at 9am',
+      () async {
+        final saved = await saveReportWithCheckup(dated(today));
+        final day = addMonths(today, 3);
+
+        expect(saved.nextCheckAt, day);
+        expect(fake.scheduled.map((r) => r.when).toList(), [
+          DateTime(day.year, day.month, day.day - 2, 9),
+          DateTime(day.year, day.month, day.day - 1, 9),
+          DateTime(day.year, day.month, day.day, 9),
+        ]);
+        expect(fake.scheduled.map((r) => r.title).toList(), [
+          'Check-up in 2 days',
+          'Check-up tomorrow',
+          'Time for your next check-up',
+        ]);
+        expect(
+          fake.scheduled.every((r) => r.body.contains('Lipid profile')),
+          isTrue,
+        );
+        expect((await loadReports()).single.nextCheckAt, day);
+      },
+    );
+
+    test('each alert has its own id, different from other reports', () {
+      final a = [
+        for (final d in reminderLeadDays) reminderIdFor('111', daysBefore: d),
+      ];
+      final b = [
+        for (final d in reminderLeadDays) reminderIdFor('222', daysBefore: d),
+      ];
+
+      expect({...a, ...b}, hasLength(6));
+      for (final id in [...a, ...b]) {
+        expect(id, inInclusiveRange(0, 0x7fffffff));
+      }
+      expect(reminderIdFor('111'), reminderIdFor('111', daysBefore: 0));
     });
 
     test('a date the user picked wins over the suggestion', () async {
+      final picked = today.add(const Duration(days: 60));
       final saved = await saveReportWithCheckup(
-        _analysis(),
-        nextCheckAt: DateTime(2027, 1, 5),
+        dated(today),
+        nextCheckAt: picked,
       );
 
-      expect(saved.nextCheckAt, DateTime(2027, 1, 5));
-      expect(fake.scheduled.single.when, DateTime(2027, 1, 5, 9));
+      expect(saved.nextCheckAt, picked);
+      expect(
+        fake.scheduled.last.when,
+        DateTime(picked.year, picked.month, picked.day, 9),
+      );
     });
 
-    test('with suggestions off, no date means no reminder', () async {
-      final saved = await saveReportWithCheckup(_analysis(), suggest: false);
+    test('with suggestions off, no date means no reminders at all', () async {
+      final saved = await saveReportWithCheckup(dated(today), suggest: false);
 
       expect(saved.nextCheckAt, isNull);
       expect(fake.scheduled, isEmpty);
-      expect(fake.cancelled, [reminderIdFor(saved.id)]);
+      expect(fake.cancelled.toSet(), {
+        for (final d in reminderLeadDays)
+          reminderIdFor(saved.id, daysBefore: d),
+      });
     });
 
     test('no AI suggestion means no reminder', () async {
-      final saved = await saveReportWithCheckup(_analysis(followUp: null));
+      final saved = await saveReportWithCheckup(dated(today, followUp: null));
       expect(saved.nextCheckAt, isNull);
       expect(fake.scheduled, isEmpty);
+    });
+
+    test('alerts that are already in the past are skipped', () async {
+      final day = DateTime(2026, 10, 20);
+      // Two days before has passed, one day before is still ahead.
+      await scheduleCheckup(
+        reportId: '5',
+        analysis: _analysis(),
+        date: day,
+        now: DateTime(2026, 10, 18, 10),
+      );
+      expect(fake.scheduled.map((r) => r.when).toList(), [
+        DateTime(2026, 10, 19, 9),
+        DateTime(2026, 10, 20, 9),
+      ]);
+
+      fake.scheduled.clear();
+      // Morning of the check-up before 9am: only the on-the-day alert is left.
+      await scheduleCheckup(
+        reportId: '5',
+        analysis: _analysis(),
+        date: day,
+        now: DateTime(2026, 10, 20, 8),
+      );
+      expect(fake.scheduled.map((r) => r.when).toList(), [
+        DateTime(2026, 10, 20, 9),
+      ]);
+
+      fake.scheduled.clear();
+      // After 9am on the day nothing is left to schedule.
+      await scheduleCheckup(
+        reportId: '5',
+        analysis: _analysis(),
+        date: day,
+        now: DateTime(2026, 10, 20, 9, 30),
+      );
+      expect(fake.scheduled, isEmpty);
+    });
+
+    test('a date in the past schedules nothing', () async {
+      await saveReportWithCheckup(_analysis(date: '2020-01-01', followUp: 1));
+      expect(fake.scheduled, isEmpty);
+    });
+
+    test('changing the date replaces the earlier alerts', () async {
+      final saved = await saveReport(
+        _analysis(),
+        nextCheckAt: today.add(const Duration(days: 40)),
+      );
+      final ids = {
+        for (final d in reminderLeadDays)
+          reminderIdFor(saved.id, daysBefore: d),
+      };
+
+      await scheduleCheckup(
+        reportId: saved.id,
+        analysis: _analysis(),
+        date: today.add(const Duration(days: 90)),
+      );
+
+      // All three old ids are cleared first, then the new ones are set.
+      expect(fake.cancelled.toSet(), ids);
+      expect(fake.scheduled.map((r) => r.id).toSet(), ids);
     });
 
     test('the date can be changed and cleared later', () async {
@@ -236,16 +339,11 @@ void main() {
       expect(byId[b.id], DateTime(2027, 2, 2));
     });
 
-    test('reminder ids are stable, positive 31-bit numbers', () {
-      final id = reminderIdFor('1760000000123456');
-      expect(id, reminderIdFor('1760000000123456'));
-      expect(id, inInclusiveRange(0, 0x7fffffff));
-    });
-
-    test('a reminder time in the past is passed on unchanged', () async {
-      // The scheduler itself ignores times that have already gone by.
-      await saveReportWithCheckup(_analysis(date: '2020-01-01', followUp: 1));
-      expect(fake.scheduled.single.when, DateTime(2020, 2, 1, 9));
+    test('cancelling removes all three alerts', () async {
+      await cancelCheckupReminders('9');
+      expect(fake.cancelled.toSet(), {
+        for (final d in reminderLeadDays) reminderIdFor('9', daysBefore: d),
+      });
     });
   });
 }

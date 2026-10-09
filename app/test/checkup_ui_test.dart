@@ -97,11 +97,17 @@ void main() {
 
       final saved = (await loadReports()).single;
       expect(saved.nextCheckAt, expected);
-      expect(
-        fake.scheduled.single.when,
+      // Three alerts: 2 days before, 1 day before and on the day, all at 9am.
+      expect(fake.scheduled.map((r) => r.when).toList(), [
+        DateTime(expected.year, expected.month, expected.day - 2, 9),
+        DateTime(expected.year, expected.month, expected.day - 1, 9),
         DateTime(expected.year, expected.month, expected.day, 9),
-      );
-      expect(fake.scheduled.single.id, reminderIdFor(saved.id));
+      ]);
+      expect(fake.scheduled.map((r) => r.id).toList(), [
+        reminderIdFor(saved.id, daysBefore: 2),
+        reminderIdFor(saved.id, daysBefore: 1),
+        reminderIdFor(saved.id),
+      ]);
     });
 
     testWidgets('turning the reminder off before saving saves no date', (
@@ -180,10 +186,67 @@ void main() {
         final saved = (await loadReports()).single;
         expect(saved.nextCheckAt, isNotNull);
         expect(fake.permissionRequests, 1);
-        expect(fake.scheduled.single.id, reminderIdFor('42'));
-        expect(fake.scheduled.single.when.hour, 9);
+        expect(fake.scheduled, hasLength(3));
+        expect(fake.scheduled.map((r) => r.id).toSet(), {
+          reminderIdFor('42', daysBefore: 2),
+          reminderIdFor('42', daysBefore: 1),
+          reminderIdFor('42'),
+        });
+        expect(fake.scheduled.every((r) => r.when.hour == 9), isTrue);
       },
     );
+
+    testWidgets('a check-up that is due offers to add the next date', (
+      tester,
+    ) async {
+      final a = _analysis();
+      final overdue = today.subtract(const Duration(days: 3));
+      _freshPrefs({
+        'saved_reports': [_saved('42', a, overdue)],
+      });
+
+      await _open(
+        tester,
+        ResultScreen(analysis: a, savedId: '42', nextCheckAt: overdue),
+      );
+      await tester.scrollUntilVisible(find.text('Add next check-up date'), 300);
+      expect(find.textContaining('overdue by 3 days'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Add next check-up date'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add next check-up date'));
+      await tester.pumpAndSettle();
+      // The picker starts from a fresh suggestion, not from the old date.
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      final saved = (await loadReports()).single;
+      expect(saved.nextCheckAt, addMonths(today, 3));
+      expect(fake.scheduled, hasLength(3));
+      expect(find.text('Add next check-up date'), findsNothing);
+    });
+
+    testWidgets('a check-up that is not due yet has no add-next button', (
+      tester,
+    ) async {
+      final a = _analysis();
+      final later = addMonths(today, 3);
+      _freshPrefs({
+        'saved_reports': [_saved('42', a, later)],
+      });
+
+      await _open(
+        tester,
+        ResultScreen(analysis: a, savedId: '42', nextCheckAt: later),
+      );
+      await tester.scrollUntilVisible(find.text('Change'), 300);
+
+      expect(find.text('Add next check-up date'), findsNothing);
+      expect(
+        find.textContaining('2 days before, 1 day before and on the day'),
+        findsOneWidget,
+      );
+    });
 
     testWidgets('if notifications are refused it explains how to allow them', (
       tester,
