@@ -124,18 +124,31 @@ Future<List<SavedReport>> loadReports() async {
   return reports;
 }
 
-Future<void> saveReport(ReportAnalysis analysis, {String? profileId}) async {
+Future<SavedReport> saveReport(
+  ReportAnalysis analysis, {
+  String? profileId,
+  DateTime? nextCheckAt,
+}) async {
   final reports = await _loadAll();
   final now = DateTime.now();
-  reports.add(
-    SavedReport(
-      id: now.microsecondsSinceEpoch.toString(),
-      profileId: profileId ?? (await activeProfile()).id,
-      savedAt: now,
-      analysis: analysis,
-    ),
+  final saved = SavedReport(
+    id: now.microsecondsSinceEpoch.toString(),
+    profileId: profileId ?? (await activeProfile()).id,
+    savedAt: now,
+    analysis: analysis,
+    nextCheckAt: nextCheckAt,
   );
+  reports.add(saved);
   await _writeReports(reports);
+  return saved;
+}
+
+/// Sets or clears the planned check-up date of a saved report.
+Future<void> setNextCheck(String id, DateTime? date) async {
+  final reports = await _loadAll();
+  await _writeReports([
+    for (final r in reports) r.id == id ? r.withNextCheck(date) : r,
+  ]);
 }
 
 Future<void> deleteReport(String id) async {

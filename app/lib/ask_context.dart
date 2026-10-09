@@ -1,3 +1,4 @@
+import 'dates.dart';
 import 'models.dart';
 
 /// One question or answer in the chat.
@@ -14,7 +15,7 @@ class ChatTurn {
 }
 
 String _date(SavedReport r) =>
-    r.analysis.reportDate ?? r.savedAt.toIso8601String().substring(0, 10);
+    isoDay(parseReportDate(r.analysis.reportDate) ?? r.savedAt);
 
 /// The saved reports in the compact form the server's /ask endpoint expects.
 /// Names and personal details are not included, only the test results.

@@ -1,3 +1,5 @@
+import 'dates.dart';
+
 class LabValue {
   final String name;
 
@@ -78,6 +80,9 @@ class ReportAnalysis {
   final bool seeDoctor;
   final String? seeDoctorReason;
 
+  /// Suggested months until the next check-up (null if none suggested).
+  final int? followUpMonths;
+
   const ReportAnalysis({
     required this.isMedicalReport,
     required this.reportType,
@@ -92,6 +97,7 @@ class ReportAnalysis {
     this.exerciseSuggestions = const [],
     this.seeDoctor = false,
     this.seeDoctorReason,
+    this.followUpMonths,
   });
 
   static List<String> _strings(Object? v) =>
@@ -114,6 +120,7 @@ class ReportAnalysis {
     exerciseSuggestions: _strings(j['exerciseSuggestions']),
     seeDoctor: j['seeDoctor'] as bool? ?? false,
     seeDoctorReason: j['seeDoctorReason'] as String?,
+    followUpMonths: (j['followUpMonths'] as num?)?.round(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -130,6 +137,7 @@ class ReportAnalysis {
     'exerciseSuggestions': exerciseSuggestions,
     'seeDoctor': seeDoctor,
     'seeDoctorReason': seeDoctorReason,
+    'followUpMonths': followUpMonths,
   };
 }
 
@@ -198,11 +206,15 @@ class SavedReport {
   final DateTime savedAt;
   final ReportAnalysis analysis;
 
+  /// When the user plans their next check-up; null means no reminder.
+  final DateTime? nextCheckAt;
+
   const SavedReport({
     required this.id,
     required this.profileId,
     required this.savedAt,
     required this.analysis,
+    this.nextCheckAt,
   });
 
   factory SavedReport.fromJson(Map<String, dynamic> j) => SavedReport(
@@ -211,6 +223,9 @@ class SavedReport {
     profileId: j['profileId'] as String? ?? defaultProfileId,
     savedAt: DateTime.parse(j['savedAt'] as String),
     analysis: ReportAnalysis.fromJson(j['analysis'] as Map<String, dynamic>),
+    nextCheckAt: j['nextCheckAt'] == null
+        ? null
+        : DateTime.tryParse(j['nextCheckAt'] as String),
   );
 
   Map<String, dynamic> toJson() => {
@@ -218,7 +233,16 @@ class SavedReport {
     'profileId': profileId,
     'savedAt': savedAt.toIso8601String(),
     'analysis': analysis.toJson(),
+    'nextCheckAt': nextCheckAt == null ? null : isoDay(nextCheckAt!),
   };
+
+  SavedReport withNextCheck(DateTime? date) => SavedReport(
+    id: id,
+    profileId: profileId,
+    savedAt: savedAt,
+    analysis: analysis,
+    nextCheckAt: date,
+  );
 }
 
 const defaultProfileId = 'me';

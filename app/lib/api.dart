@@ -205,5 +205,6 @@ const _mockResponse = <String, dynamic>{
     'Take short walking breaks if you sit for long periods.',
   ],
   'seeDoctor': true,
+  'followUpMonths': 3,
   'seeDoctorReason': 'Two results are outside the usual range, so it is worth having a doctor review them.',
 };

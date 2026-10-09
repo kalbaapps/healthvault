@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../checkup.dart';
+import '../dates.dart';
 import '../models.dart';
 import '../pdf_brief.dart';
+import '../range_bar.dart';
+import '../reminders.dart';
 import '../storage.dart';
 
 class ResultScreen extends StatefulWidget {
@@ -10,7 +14,15 @@ class ResultScreen extends StatefulWidget {
   /// Set when opened from history; null for a fresh, unsaved result.
   final String? savedId;
 
-  const ResultScreen({super.key, required this.analysis, this.savedId});
+  /// The planned check-up of a saved report (ignored for a fresh result).
+  final DateTime? nextCheckAt;
+
+  const ResultScreen({
+    super.key,
+    required this.analysis,
+    this.savedId,
+    this.nextCheckAt,
+  });
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -18,6 +30,9 @@ class ResultScreen extends StatefulWidget {
 
 class _ResultScreenState extends State<ResultScreen> {
   late final String? _savedId = widget.savedId;
+  late DateTime? _nextCheck = widget.savedId != null
+      ? widget.nextCheckAt
+      : defaultNextCheck(widget.analysis, DateTime.now());
 
   Future<void> _share() async {
     try {
@@ -31,9 +46,50 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Future<void> _save() async {
-    await saveReport(widget.analysis);
+    await saveReportWithCheckup(
+      widget.analysis,
+      nextCheckAt: _nextCheck,
+      suggest: false,
+    );
     if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  Future<void> _pickCheckDate() async {
+    final today = dateOnly(DateTime.now());
+    final current = _nextCheck;
+    final picked = await showDatePicker(
+      context: context,
+      helpText: 'Next check-up',
+      initialDate: current != null && !current.isBefore(today)
+          ? current
+          : addMonths(today, 3),
+      firstDate: today,
+      lastDate: addMonths(today, 60),
+    );
+    if (picked == null || !mounted) return;
+    await _setCheck(dateOnly(picked));
+  }
+
+  Future<void> _setCheck(DateTime? date) async {
+    setState(() => _nextCheck = date);
+    if (date != null) {
+      final allowed = await reminders.requestPermission();
+      if (!allowed && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Allow notifications in Settings to get the reminder.',
+            ),
+          ),
+        );
+      }
+    }
+    // A fresh result is saved, with its date, when the user taps Save.
+    final id = _savedId;
+    if (id == null) return;
+    await setNextCheck(id, date);
+    await scheduleCheckup(reportId: id, analysis: widget.analysis, date: date);
   }
 
   Future<void> _delete() async {
@@ -57,6 +113,7 @@ class _ResultScreenState extends State<ResultScreen> {
       ),
     );
     if (ok != true) return;
+    await reminders.cancel(reminderIdFor(id));
     await deleteReport(id);
     if (mounted) Navigator.of(context).pop();
   }
@@ -129,6 +186,11 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
           ],
           if (a.seeDoctor) _DoctorCard(reason: a.seeDoctorReason),
+          _CheckupCard(
+            next: _nextCheck,
+            onChange: _pickCheckDate,
+            onClear: () => _setCheck(null),
+          ),
           if (a.questionsForDoctor.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
@@ -230,6 +292,16 @@ class _ValueCard extends StatelessWidget {
             ),
             if (reference.isNotEmpty)
               Text('Usual range: $reference', style: theme.textTheme.bodySmall),
+            if (value.value != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: RangeBar(
+                  value: value.value!,
+                  low: value.referenceLow,
+                  high: value.referenceHigh,
+                  flag: value.flag,
+                ),
+              ),
             const SizedBox(height: 8),
             Text(value.explanation),
           ],
@@ -312,6 +384,67 @@ class _DoctorCard extends StatelessWidget {
                 style: TextStyle(color: scheme.onTertiaryContainer),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CheckupCard extends StatelessWidget {
+  final DateTime? next;
+  final VoidCallback onChange;
+  final VoidCallback onClear;
+
+  const _CheckupCard({
+    required this.next,
+    required this.onChange,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final date = next;
+    final status = date == null ? null : checkupStatus(date, DateTime.now());
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          children: [
+            Icon(Icons.event_available, color: theme.colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Next check-up', style: theme.textTheme.titleSmall),
+                  Text(
+                    date == null
+                        ? 'No reminder set'
+                        : status!.short.isEmpty
+                        ? formatDay(date)
+                        : '${formatDay(date)} · ${status.short}',
+                  ),
+                  if (date != null)
+                    Text(
+                      'A reminder will appear on your phone that morning. '
+                      'Ask your doctor what is right for you.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: onChange,
+              child: Text(date == null ? 'Set a date' : 'Change'),
+            ),
+            if (date != null)
+              IconButton(
+                tooltip: 'Turn off reminder',
+                onPressed: onClear,
+                icon: const Icon(Icons.notifications_off_outlined),
+              ),
           ],
         ),
       ),

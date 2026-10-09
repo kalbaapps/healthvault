@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../dates.dart';
 import '../models.dart';
 import '../storage.dart';
 
@@ -26,8 +27,7 @@ class _Series {
 List<_Series> _buildSeries(List<SavedReport> reports) {
   final byName = <String, List<(DateTime, LabValue)>>{};
   for (final report in reports) {
-    final date =
-        DateTime.tryParse(report.analysis.reportDate ?? '') ?? report.savedAt;
+    final date = parseReportDate(report.analysis.reportDate) ?? report.savedAt;
     for (final v in report.analysis.values) {
       if (v.value == null) continue;
       byName.putIfAbsent(v.matchKey, () => []).add((date, v));

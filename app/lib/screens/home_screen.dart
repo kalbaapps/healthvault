@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
 import '../app_lock.dart';
+import '../checkup.dart';
+import '../dates.dart';
 import '../models.dart';
 import '../pending.dart';
 import '../storage.dart';
@@ -67,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           language: item.language,
         );
         if (analysis.isMedicalReport) {
-          await saveReport(analysis, profileId: item.profileId);
+          await saveReportWithCheckup(analysis, profileId: item.profileId);
           done++;
         }
         await removePending(item.id);
@@ -397,6 +399,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _open(SavedReport report) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ResultScreen(
+          analysis: report.analysis,
+          savedId: report.id,
+          nextCheckAt: report.nextCheckAt,
+        ),
+      ),
+    );
+    await _refresh();
+  }
+
   Future<void> _toggleLock(bool enable) async {
     if (enable) {
       if (!await AppLock.isAvailable()) {
@@ -445,6 +460,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final reports = _reports;
+    final showBanner =
+        reports != null &&
+        reports.isNotEmpty &&
+        reports.first.nextCheckAt != null;
     return PopScope(
       canPop: !_analyzing,
       onPopInvokedWithResult: (didPop, _) {
@@ -538,21 +557,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   16,
                   96 + MediaQuery.viewPaddingOf(context).bottom,
                 ),
-                itemCount: reports.length,
-                itemBuilder: (context, i) => _ReportTile(
-                  report: reports[i],
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ResultScreen(
-                          analysis: reports[i].analysis,
-                          savedId: reports[i].id,
-                        ),
-                      ),
+                itemCount: reports.length + (showBanner ? 1 : 0),
+                itemBuilder: (context, i) {
+                  if (showBanner && i == 0) {
+                    return _CheckupBanner(
+                      next: reports.first.nextCheckAt!,
+                      onTap: () => _open(reports.first),
                     );
-                    await _refresh();
-                  },
-                ),
+                  }
+                  final report = reports[showBanner ? i - 1 : i];
+                  return _ReportTile(
+                    report: report,
+                    onTap: () => _open(report),
+                  );
+                },
               ),
       ),
     );
@@ -688,6 +706,48 @@ class _PendingBar extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Next check-up in 12 days", shown above the newest report's reminder.
+class _CheckupBanner extends StatelessWidget {
+  final DateTime next;
+  final VoidCallback onTap;
+
+  const _CheckupBanner({required this.next, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final status = checkupStatus(next, DateTime.now());
+    final (background, foreground) = switch (status.urgency) {
+      CheckupUrgency.overdue ||
+      CheckupUrgency.today => (scheme.errorContainer, scheme.onErrorContainer),
+      CheckupUrgency.soon => (
+        scheme.tertiaryContainer,
+        scheme.onTertiaryContainer,
+      ),
+      CheckupUrgency.later => (
+        scheme.secondaryContainer,
+        scheme.onSecondaryContainer,
+      ),
+    };
+    return Card(
+      color: background,
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(Icons.event_available, color: foreground),
+        title: Text(status.text, style: TextStyle(color: foreground)),
+        subtitle: Text(
+          // The title already holds the date when it is far away.
+          status.urgency == CheckupUrgency.later
+              ? 'From your latest report'
+              : formatDay(next),
+          style: TextStyle(color: foreground.withValues(alpha: 0.8)),
+        ),
+        trailing: Icon(Icons.chevron_right, color: foreground),
       ),
     );
   }
